@@ -13,6 +13,7 @@
     }
   },
   "author": "edsdck",
+  "homepage_url": "https://github.com/edsdck/linkdesk",
   "icons": {
     "48": "icons/linkdesk-48.png",
     "96": "icons/linkdesk-96.png",

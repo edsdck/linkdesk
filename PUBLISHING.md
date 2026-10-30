@@ -13,13 +13,7 @@ A checklist to pick up where we left off. Everything the form asks for is in [st
 
    This runs unit tests, lint, the real-Firefox tests, and writes `dist/linkdesk-<version>.zip`.
 
-3. Optional: make the GitHub repo public, so the listing can link to it for support:
-
-   ```bash
-   gh repo edit edsdck/linkdesk --visibility public --accept-visibility-change-consequences
-   ```
-
-   Then add `"homepage_url": "https://github.com/edsdck/linkdesk"` to the manifest.
+3. The GitHub repo is public (since 30 Oct 2026) and is the listing's homepage and support site.
 
 ## Submit
 

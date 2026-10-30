@@ -53,7 +53,8 @@ new tab, speed dial, bookmarks, start page, shortcuts, desktop
 
 ## Support
 
-- Support website: <https://github.com/edsdck/linkdesk/issues> (works once the repo is public; until then leave empty or use an email)
+- Homepage: <https://github.com/edsdck/linkdesk>
+- Support website: <https://github.com/edsdck/linkdesk/issues>
 - Support email: optional
 
 ## Licence
