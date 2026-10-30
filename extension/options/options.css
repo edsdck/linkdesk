@@ -1,0 +1,24 @@
+main { max-width: 720px; margin: 0 auto; padding: 40px 24px; }
+h1 { font-size: 22px; font-weight: 600; margin: 0 0 24px; }
+.setting {
+  display: grid; grid-template-columns: 160px 1fr; gap: 16px;
+  padding: 16px 0; border-bottom: 1px solid var(--border-subtle);
+}
+.setting h2 { font-size: var(--font-size); font-weight: 600; margin: 6px 0 0; }
+.control { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; }
+.control label { display: flex; gap: 6px; align-items: center; }
+.control .note { flex-basis: 100%; margin: 0; }
+.buttons { gap: 8px; }
+.setting:target, .setting.highlight { background: color-mix(in srgb, var(--accent) 8%, transparent); border-radius: var(--radius-medium); }
+.wallpapers { display: flex; gap: 8px; }
+.wallpapers label { position: relative; }
+.wallpapers input { position: absolute; opacity: 0; inset: 0; }
+.wallpapers span {
+  forced-color-adjust: none;
+  display: block; width: 56px; height: 36px; border-radius: var(--radius-small);
+  border: 1px solid var(--border); background-size: cover; background-position: center;
+}
+.wallpapers input:checked + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+.wallpapers input:focus-visible + span { outline: var(--focus-outline); outline-offset: 4px; }
+.status { min-height: 1.5em; color: var(--text-secondary); }
+@media (max-width: 560px) { .setting { grid-template-columns: 1fr; } }

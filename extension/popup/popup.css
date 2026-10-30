@@ -1,0 +1,26 @@
+body { width: 300px; background: var(--surface); }
+main { padding: 16px; display: grid; gap: 12px; }
+.page { display: flex; gap: 12px; align-items: center; min-width: 0; }
+.page .tile { --tile: 40px; }
+.page-text { min-width: 0; }
+#page-title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#page-host { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+main > p { margin: 0; }
+#add { width: 100%; }
+#edit-first { justify-self: start; }
+#compact { display: grid; gap: 10px; border-top: 1px solid var(--border-subtle); padding-top: 12px; }
+#compact[hidden] { display: none; }
+.row { display: grid; grid-template-columns: 48px 1fr; gap: 8px; align-items: center; border: none; margin: 0; padding: 0; }
+.row > span, .row legend { color: var(--text-secondary); font-size: var(--font-size-small); }
+.icons { align-items: start; }
+.icons legend { float: left; width: 48px; padding: 0; margin-top: 2px; }
+.choices { display: grid; gap: 6px; }
+.choices label { display: flex; gap: 6px; align-items: center; }
+.choice { display: flex; gap: 8px; align-items: center; }
+button.small { min-height: 26px; padding: 2px 10px; }
+#letter { width: 48px; min-height: 26px; padding: 2px 6px; text-align: center; }
+#done { margin: 0; padding: 24px 16px; text-align: center; }
+/* Stays rendered (so the change is announced) but takes no space while empty. */
+#done:empty { padding: 0; }
+#edit-first::after { content: " ⌄"; }
+#edit-first[aria-expanded="true"]::after { content: " ⌃"; }

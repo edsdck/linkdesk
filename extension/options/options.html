@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="color-scheme" content="light dark">
+  <title>Linkdesk settings</title>
+  <link rel="stylesheet" href="../shared/base.css">
+  <link rel="stylesheet" href="options.css">
+  <script type="module" src="options.js"></script>
+</head>
+<body>
+  <main>
+    <h1>Linkdesk settings</h1>
+
+    <section class="setting" aria-labelledby="size-label">
+      <h2 id="size-label">Icon size</h2>
+      <div class="control" role="radiogroup" aria-labelledby="size-label">
+        <label><input type="radio" name="icon-size" value="s"> Small</label>
+        <label><input type="radio" name="icon-size" value="m"> Medium</label>
+        <label><input type="radio" name="icon-size" value="l"> Large</label>
+      </div>
+    </section>
+
+    <section class="setting" id="wallpaper" aria-labelledby="wallpaper-label">
+      <h2 id="wallpaper-label">Wallpaper</h2>
+      <div class="control">
+        <div id="wallpapers" class="wallpapers" role="radiogroup" aria-labelledby="wallpaper-label"></div>
+        <button type="button" id="wallpaper-upload">Upload…</button>
+        <input type="file" id="wallpaper-file" accept="image/png,image/jpeg,image/webp" hidden>
+        <p id="wallpaper-note" class="note" hidden></p>
+      </div>
+    </section>
+
+    <section class="setting" aria-labelledby="access-label">
+      <h2 id="access-label">Site icons</h2>
+      <div class="control">
+        <label class="check"><input type="checkbox" id="site-access"> Fetch site icons and titles</label>
+        <p class="note">Allows Linkdesk to read the websites you add, only to get their icon and title.</p>
+      </div>
+    </section>
+
+    <section class="setting" aria-labelledby="import-label">
+      <h2 id="import-label">Import</h2>
+      <div class="control buttons">
+        <button type="button" id="import-top">Most visited</button>
+        <button type="button" id="import-bookmarks">Bookmarks…</button>
+      </div>
+    </section>
+
+    <section class="setting" aria-labelledby="data-label">
+      <h2 id="data-label">Data</h2>
+      <div class="control buttons">
+        <button type="button" id="export">Export…</button>
+        <button type="button" id="import-file-button">Import file…</button>
+        <input type="file" id="import-file" accept="application/json,.json" hidden>
+        <button type="button" id="reset" class="danger">Reset desktop</button>
+      </div>
+    </section>
+
+    <p id="status" class="status" role="status"></p>
+  </main>
+
+  <dialog id="import-mode" aria-labelledby="import-mode-title">
+    <h2 id="import-mode-title">Import links</h2>
+    <p>Add the file’s links to your desktop, or replace your desktop and settings with the file? Replace can’t be undone.</p>
+    <div class="button-row">
+      <button type="button" value="cancel">Cancel</button>
+      <button type="button" value="replace" class="danger" title="Removes your current links and settings">Replace</button>
+      <button type="button" value="merge" class="primary">Merge</button>
+    </div>
+  </dialog>
+
+  <dialog id="reset-confirm" aria-labelledby="reset-title">
+    <h2 id="reset-title">Reset your desktop?</h2>
+    <p>All links, icons and settings will be removed. This can’t be undone.</p>
+    <div class="button-row">
+      <button type="button" value="cancel" class="primary">Cancel</button>
+      <button type="button" value="reset" class="danger">Reset</button>
+    </div>
+  </dialog>
+</body>
+</html>

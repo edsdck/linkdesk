@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="color-scheme" content="light dark">
+  <title>Add to Linkdesk</title>
+  <link rel="stylesheet" href="../shared/base.css">
+  <link rel="stylesheet" href="popup.css">
+  <script type="module" src="popup.js"></script>
+</head>
+<body>
+  <main id="main">
+    <div class="page">
+      <span id="preview"></span>
+      <div class="page-text">
+        <div id="page-title"></div>
+        <div id="page-host" class="note"></div>
+      </div>
+    </div>
+    <p id="unsupported" class="note" hidden>Only web pages (http and https) can be added.</p>
+    <p id="dup" class="note" hidden>ⓘ Already on your desktop</p>
+    <button type="button" id="add" class="primary">Add to desktop</button>
+    <button type="button" id="edit-first" class="link" aria-expanded="false" aria-controls="compact">Edit first</button>
+
+    <form id="compact" hidden>
+      <label class="row"><span>Name</span><input type="text" id="name" maxlength="200" autocomplete="off"></label>
+      <fieldset class="row icons">
+        <legend>Icon</legend>
+        <div class="choices">
+          <label><input type="radio" name="icon-kind" value="site" checked> Site icon</label>
+          <span class="choice">
+            <label><input type="radio" name="icon-kind" value="letter"> Letter</label>
+            <input type="text" id="letter" maxlength="16" aria-label="Tile letters (up to 2)">
+          </span>
+          <div id="colors"></div>
+        </div>
+      </fieldset>
+      <p id="icon-note" class="note" hidden></p>
+      <!-- No upload here: a file picker closes the popup. Images can be set from the desktop editor. -->
+    </form>
+  </main>
+  <p id="done" role="status"></p>
+</body>
+</html>

@@ -1,0 +1,40 @@
+{
+  "manifest_version": 3,
+  "name": "Linkdesk",
+  "version": "0.1.0",
+  "description": "Turns the new tab page into a simple desktop of your favourite links.",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "linkdesk@linkdesk.extension",
+      "strict_min_version": "140.0",
+      "data_collection_permissions": {
+        "required": ["none"]
+      }
+    }
+  },
+  "author": "edsdck",
+  "icons": {
+    "48": "icons/linkdesk-48.png",
+    "96": "icons/linkdesk-96.png",
+    "128": "icons/linkdesk-128.png"
+  },
+  "background": {
+    "scripts": ["background.js"],
+    "type": "module"
+  },
+  "chrome_url_overrides": {
+    "newtab": "newtab/newtab.html"
+  },
+  "action": {
+    "default_title": "Add to Linkdesk",
+    "default_popup": "popup/popup.html",
+    "default_icon": "icons/linkdesk.svg"
+  },
+  "options_ui": {
+    "page": "options/options.html",
+    "open_in_tab": true
+  },
+  "permissions": ["storage", "menus", "menus.overrideContext", "activeTab", "scripting", "theme"],
+  "optional_permissions": ["bookmarks", "topSites"],
+  "optional_host_permissions": ["<all_urls>"]
+}
