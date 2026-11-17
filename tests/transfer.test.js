@@ -54,3 +54,13 @@ test('validateImport rejects oversized icons and missing wallpaper images', () =
   assert.equal(wallpaperImage, null);
   assert.deepEqual(settings.wallpaper, { kind: 'preset', value: 'plain' });
 });
+
+test('extra links survive export and import', () => {
+  const { layout } = addLinks(emptyLayout(), [{ url: 'https://github.com/', more: [{ url: 'https://github.com/pulls', name: 'PRs' }] }, { url: 'https://b.com/' }], { now: 1, newId: () => Math.random().toString(36) });
+  const data = buildExport({ layout, settings: { iconSize: 'm', wallpaper: { kind: 'preset', value: 'plain' } }, icons: {} }, 1);
+  assert.deepEqual(data.links[0].more, [{ url: 'https://github.com/pulls', name: 'PRs' }]);
+  assert.equal('more' in data.links[1], false, 'no empty list in the file');
+  const { items } = validateImport(JSON.parse(JSON.stringify(data)));
+  assert.deepEqual(items[0].more, [{ url: 'https://github.com/pulls', name: 'PRs' }]);
+  assert.deepEqual(items[1].more, []);
+});

@@ -54,6 +54,15 @@ const waitIconCount = async (n) => {
     throw new Error(`Expected ${n} icons, have ${names.length}: ${names.join(', ')}`);
   }
 };
+// Jump mode from the taskbar button (Alt+J goes through a toolbar panel; see its own test).
+const startJumpMode = async () => {
+  const button = await ff.eval(page, () => {
+    const r = document.getElementById('jump-button').getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  });
+  await ff.click(page, button.x, button.y);
+  await ff.waitFor(page, () => document.querySelectorAll('#jump .jump-hint').length > 0);
+};
 const focusDesktop = async () => {
   const empty = await cellCenter(7, 5);
   await ff.click(page, empty.x, empty.y);
@@ -353,15 +362,6 @@ describe('Linkdesk in Firefox', () => {
     }, { args: [ids, before] });
   });
 
-  test('desktop shortcuts do not fire while the taskbar has focus', async () => {
-    await ff.eval(page, () => {
-      document.querySelector('.icon').focus();
-      return true;
-    });
-    await ff.keys(page, ['Space']);
-    await ff.eval(page, () => {
-      document.getElementById('settings-button').focus();
-      return true;
   test('a narrower window shrinks the desktop instead of moving icons', async () => {
     const link = (await storedLayout()).links[0];
     await send('setCells', { cells: { [link.id]: { col: 9, row: 0 } } });
@@ -403,6 +403,15 @@ describe('Linkdesk in Firefox', () => {
     }
   });
 
+  test('desktop shortcuts do not fire while the taskbar has focus', async () => {
+    await ff.eval(page, () => {
+      document.querySelector('.icon').focus();
+      return true;
+    });
+    await ff.keys(page, ['Space']);
+    await ff.eval(page, () => {
+      document.getElementById('settings-button').focus();
+      return true;
     });
     await ff.keys(page, ['Delete']);
     await sleep(200);
@@ -635,6 +644,221 @@ describe('Linkdesk in Firefox', () => {
     await ff.keys(page, ['Escape']);
     await ff.waitFor(page, () => !document.getElementById('editor').open);
     assert.equal((await linkByName('Wiki')).url, 'https://wikipedia.org/');
+  });
+
+  test('More links from the editor: stacked tile, shown on hover (not on right-click)', async () => {
+    const wiki = await iconNamed('Wiki');
+    await openContextMenu(wiki.x, wiki.y);
+    await chooseMenuItem('Edit…');
+    await ff.waitFor(page, () => document.getElementById('editor').open);
+    await ff.eval(page, () => {
+      document.getElementById('editor-more-add').click();
+      document.getElementById('editor-more-add').click();
+      const [first, second] = document.querySelectorAll('#editor-more li');
+      const [url1, name1] = first.querySelectorAll('input');
+      url1.value = 'wikipedia.org/wiki/Firefox';
+      name1.value = 'Firefox';
+      second.querySelector('input').value = 'https://en.wikipedia.org/wiki/Mozilla';
+      document.querySelector('#editor-form button[type="submit"]').click();
+      return true;
+    });
+    await ff.waitFor(page, async () => {
+      const { layout } = await browser.storage.local.get('layout');
+      return layout.links.find((link) => link.name === 'Wiki').more.length === 2;
+    });
+    assert.deepEqual((await linkByName('Wiki')).more, [
+      { url: 'https://wikipedia.org/wiki/Firefox', name: 'Firefox' },
+      { url: 'https://en.wikipedia.org/wiki/Mozilla', name: 'Mozilla' },
+    ]);
+    const count = await ff.waitFor(page, () => [...document.querySelectorAll('.icon.has-more .more-count')].map((n) => n.textContent).join() || null);
+    assert.equal(count, '2');
+    const labels = await openContextMenu(wiki.x, wiki.y);
+    assert.equal(labels[0], 'Open', `right-click keeps only the usual items: ${labels}`);
+    const chrome = await ff.chromeWindow();
+    await ff.eval(chrome, () => {
+      document.getElementById('contentAreaContextMenu').hidePopup();
+      return true;
+    });
+    const away = await cellCenter(7, 5);
+    await ff.pointer(page, [{ type: 'pointerMove', x: Math.round(away.x), y: Math.round(away.y) }]);
+    await ff.pointer(page, [{ type: 'pointerMove', x: Math.round(wiki.x), y: Math.round(wiki.y) }]);
+    const rows = await ff.waitFor(page, () => {
+      const list = document.getElementById('more-list');
+      return list.hidden ? null : [...list.querySelectorAll('.more-row')].map((row) => [row.textContent, row.getAttribute('href')]);
+    });
+    assert.deepEqual(rows, [
+      ['Firefox/wiki/Firefox', 'https://wikipedia.org/wiki/Firefox'],
+      ['Mozilla/wiki/Mozilla', 'https://en.wikipedia.org/wiki/Mozilla'],
+    ]);
+    await ff.pointer(page, [{ type: 'pointerMove', x: Math.round(away.x), y: Math.round(away.y) }]);
+    await ff.waitFor(page, () => document.getElementById('more-list').hidden);
+  });
+
+  test('jump: letters on every icon; a tile with more links lists them; Esc steps back', async () => {
+    await startJumpMode();
+    const icons = await ff.eval(page, () => document.querySelectorAll('.icon').length);
+    const hints = await ff.waitFor(page, () => {
+      const nodes = [...document.querySelectorAll('#jump .jump-hint')];
+      return nodes.length ? nodes.map((n) => [n.dataset.id, n.textContent]) : null;
+    });
+    assert.equal(hints.length, icons, 'one code per icon');
+    assert.equal(new Set(hints.map(([, code]) => code)).size, icons, 'codes are unique');
+    const wikiId = (await linkByName('Wiki')).id;
+    const wikiCode = hints.find(([id]) => id === wikiId)[1];
+    await ff.type(page, wikiCode);
+    const rows = await ff.waitFor(page, () => {
+      const list = document.getElementById('jump-list');
+      return list.hidden ? null : [...list.querySelectorAll('.jump-row')].map((row) => row.textContent);
+    });
+    assert.equal(rows.length, 3);
+    assert.match(rows[0], /^aWiki/);
+    assert.match(rows[1], /^sFirefox\/wiki\/Firefox/);
+    await ff.keys(page, ['Escape']);
+    assert.equal(await ff.eval(page, () => document.getElementById('jump-list').hidden && document.querySelectorAll('#jump .jump-hint').length), icons, 'back to the icon letters');
+    await ff.keys(page, ['Escape']);
+    assert.equal(await ff.eval(page, () => document.querySelectorAll('#jump .jump-hint').length), 0, 'jump mode ended');
+  });
+
+  test('the taskbar Jump button starts jump mode and shows the shortcut; F does nothing', async () => {
+    assert.equal(await ff.eval(page, () => document.getElementById('jump-shortcut').textContent), 'Alt+J');
+    await focusDesktop();
+    await ff.keys(page, ['f']);
+    assert.equal(await ff.eval(page, () => document.querySelectorAll('#jump .jump-hint').length), 0, 'no in-page F shortcut');
+    await startJumpMode();
+    await ff.keys(page, ['Escape']);
+    assert.equal(await ff.eval(page, () => document.querySelectorAll('#jump .jump-hint').length), 0);
+  });
+
+  test('jump: Shift on the last letter opens the link in a new tab', async () => {
+    const before = await ff.eval(page, async () => (await browser.tabs.query({})).map((tab) => tab.id));
+    await startJumpMode();
+    const code = await ff.waitFor(page, async () => {
+      const { layout } = await browser.storage.local.get('layout');
+      const plain = layout.links.find((link) => !link.more?.length);
+      return document.querySelector(`#jump .jump-hint[data-id="${plain.id}"]`)?.textContent ?? null;
+    });
+    for (const [i, ch] of [...code].entries()) await ff.keys(page, i === code.length - 1 ? ['Shift', ch.toUpperCase()] : [ch]);
+    const opened = await ff.waitFor(page, async (ids) => (await browser.tabs.query({})).find((tab) => !ids.includes(tab.id))?.id ?? null, { args: [before] });
+    assert.equal(await ff.eval(page, () => document.querySelectorAll('#jump .jump-hint').length), 0);
+    assert.equal(await ff.eval(page, () => location.pathname.endsWith('/newtab/newtab.html')), true, 'the desktop stays');
+    await ff.eval(page, (id) => browser.tabs.remove(id).then(() => true), opened);
+  });
+
+  test('Alt+drop adds a link to another; one undo splits them again', async () => {
+    const code = await iconNamed('Code');
+    const wiki = await iconNamed('Wiki');
+    // Mid-drag over another icon, a label says what Alt does; Esc cancels this one.
+    await ff.pointer(page, [
+      { type: 'pointerMove', x: Math.round(code.x), y: Math.round(code.y) },
+      { type: 'pointerDown', button: 0 },
+      { type: 'pointerMove', x: Math.round(code.x + 10), y: Math.round(code.y + 10), duration: 50 },
+      { type: 'pointerMove', x: Math.round(wiki.x), y: Math.round(wiki.y), duration: 100 },
+    ]);
+    assert.equal(await ff.waitFor(page, () => document.querySelector('.drag-hint')?.textContent ?? null), 'Hold Alt to add to “Wiki”');
+    await ff.keys(page, ['Escape']);
+    await ff.pointer(page, [{ type: 'pointerUp', button: 0 }]);
+    assert.equal(await ff.eval(page, () => document.querySelectorAll('.drag-hint').length), 0);
+    await ff.send('input.performActions', {
+      context: page,
+      actions: [
+        {
+          type: 'pointer',
+          id: 'mouse',
+          parameters: { pointerType: 'mouse' },
+          actions: [
+            { type: 'pointerMove', x: Math.round(code.x), y: Math.round(code.y) },
+            { type: 'pointerDown', button: 0 },
+            { type: 'pointerMove', x: Math.round(code.x + 10), y: Math.round(code.y + 10), duration: 50 },
+            { type: 'pointerMove', x: Math.round(wiki.x), y: Math.round(wiki.y), duration: 100 },
+            { type: 'pointerUp', button: 0 },
+            { type: 'pause', duration: 0 },
+          ],
+        },
+        {
+          type: 'key',
+          id: 'keyboard',
+          actions: [{ type: 'keyDown', value: '' }, { type: 'pause' }, { type: 'pause' }, { type: 'pause' }, { type: 'pause' }, { type: 'keyUp', value: '' }],
+        },
+      ],
+    });
+    await ff.waitFor(page, async () => {
+      const { layout } = await browser.storage.local.get('layout');
+      return !layout.links.some((link) => link.name === 'Code');
+    });
+    assert.deepEqual((await linkByName('Wiki')).more.map((item) => item.name), ['Firefox', 'Mozilla', 'Code']);
+    assert.equal(await toastText(), 'Added “Code” to “Wiki”');
+    await focusDesktop();
+    await ff.keys(page, ['Control', 'z']);
+    await ff.waitFor(page, async () => {
+      const { layout } = await browser.storage.local.get('layout');
+      return layout.links.some((link) => link.name === 'Code') && layout.links.find((link) => link.name === 'Wiki').more.length === 2;
+    });
+  });
+
+  test('the Alt+J tab from another page starts in jump mode; Esc closes it', async () => {
+    const tab = await ff.openTab(`${NEWTAB}#jump-back`);
+    const hints = await ff.waitFor(tab, () => document.querySelectorAll('#jump .jump-hint').length || null);
+    assert.ok(hints > 0);
+    assert.equal(await ff.eval(tab, () => location.hash), '', 'hash cleared');
+    await ff.keys(tab, ['Escape']);
+    let open = true;
+    for (let i = 0; i < 30 && open; i += 1) {
+      await sleep(100);
+      const { contexts } = await ff.send('browsingContext.getTree', {});
+      open = contexts.some((c) => c.context === tab);
+    }
+    assert.equal(open, false, 'Esc closed the tab');
+  });
+
+  test('Alt+J on another page opens a desktop tab in jump mode', async () => {
+    const chrome = await ff.chromeWindow();
+    const before = new Set((await ff.send('browsingContext.getTree', {})).contexts.map((c) => c.context));
+    const other = await ff.newTab('about:blank');
+    await ff.eval(chrome, () => {
+      gBrowser.selectedTab = [...gBrowser.tabs].find((tab) => tab.linkedBrowser.currentURI.spec === 'about:blank');
+      return true;
+    });
+    await ff.keys(chrome, ['Alt', 'j']);
+    let jumped = null;
+    for (let i = 0; i < 30 && !jumped; i += 1) {
+      await sleep(100);
+      const { contexts } = await ff.send('browsingContext.getTree', {});
+      const fresh = contexts.find((c) => !before.has(c.context) && c.url.startsWith(NEWTAB));
+      if (fresh) jumped = await ff.eval(fresh.context, () => (document.querySelectorAll('#jump .jump-hint').length ? document.hasFocus() || 'no focus' : null)).then((r) => r && { context: fresh.context, focus: r });
+    }
+    assert.ok(jumped, 'a desktop tab opened with jump letters');
+    await ff.closeTab(jumped.context);
+    await ff.closeTab(other);
+  });
+
+  test('Alt+J on a desktop tab: a toolbar panel passes the keys on, no reload', async () => {
+    const chrome = await ff.chromeWindow();
+    const tab = await ff.openTab(NEWTAB);
+    await ff.waitFor(tab, () => document.querySelectorAll('.icon').length > 0);
+    await ff.eval(tab, () => {
+      window.__sameDocument = true;
+      return true;
+    });
+    await ff.eval(chrome, () => {
+      gURLBar.focus();
+      return true;
+    });
+    await ff.keys(chrome, ['Alt', 'j']);
+    await ff.waitFor(tab, () => document.querySelectorAll('#jump .jump-hint').length > 0);
+    assert.equal(await ff.eval(tab, () => window.__sameDocument === true), true, 'the tab did not reload');
+    // The panel's page can't be driven over BiDi; dispatch its key events from a frame script.
+    const typeInPanel = (keys) => ff.eval(chrome, (list) => {
+      const panel = document.querySelector('browser.webextension-popup-browser');
+      if (!panel) return false;
+      const code = list.map((key) => `content.document.dispatchEvent(new content.KeyboardEvent('keydown', { key: ${JSON.stringify(key)}, bubbles: true }));`).join('');
+      panel.messageManager.loadFrameScript(`data:,${encodeURIComponent(code)}`, false);
+      return true;
+    }, keys);
+    await ff.waitFor(chrome, () => Boolean(document.querySelector('browser.webextension-popup-browser')));
+    assert.equal(await typeInPanel(['x', 'Escape']), true, 'the panel opened');
+    await ff.waitFor(tab, () => document.querySelectorAll('#jump .jump-hint').length === 0);
+    await ff.waitFor(chrome, () => !document.querySelector('browser.webextension-popup-browser'));
+    await ff.closeTab(tab);
   });
 
   test('Settings opens in its own tab; the desktop and an open editor stay', async () => {

@@ -4,8 +4,8 @@ import { allowedIconUrls, fetchFirstIcon, fetchPageMeta, MAX_IMAGE_BYTES, typeHi
 import { rankIcons } from './lib/favicon.js';
 import { dataUrlToBlob, toIconPng, toWallpaper } from './lib/image.js';
 import {
-  addLinks, emptyLayout, iconKey, isWebUrl, migrate, normalizeSettings, removeLinks, restoreLinks, setCells, updateLink,
-  UserError,
+  addLinks, emptyLayout, iconKey, isWebUrl, mergeLinks, migrate, normalizeSettings, removeLinks, restoreLinks, setCells,
+  updateLink, UserError,
 } from './lib/model.js';
 import { DESKTOP_IDS, ICON_ITEMS, menuId, PAGE_ITEMS } from './lib/menus.js';
 import { buildExport, isSafeImageDataUrl, MAX_WALLPAPER_CHARS, validateImport } from './lib/transfer.js';
@@ -237,6 +237,18 @@ async function deleteItems(ids) {
   });
 }
 
+// Makes one link an extra link of another. Returns what undo needs to put it back.
+async function mergeItems(sourceId, targetId) {
+  return enqueue(async () => {
+    const { layout: next, removed, previousMore } = mergeLinks(await readLayout(), sourceId, targetId, Date.now());
+    const key = iconKey(sourceId);
+    const { [key]: iconData = null } = await browser.storage.local.get(key);
+    await browser.storage.local.set({ layout: next });
+    await browser.storage.local.remove(key);
+    return { link: removed, iconData, previousMore };
+  });
+}
+
 async function restoreItems(items) {
   return enqueue(async () => {
     const layout = await readLayout();
@@ -369,6 +381,7 @@ const handlers = {
   addLinks: ({ items, meta }) => addItems(items, meta).then((links) => links.map((link) => link.id)),
   deleteLinks: ({ ids }) => deleteItems(ids),
   restoreLinks: ({ items }) => restoreItems(items),
+  mergeLinks: ({ sourceId, targetId }) => mergeItems(sourceId, targetId),
   updateLink: (message) => editLink(message),
   setCells: ({ cells }) => enqueue(async () => saveLayout(setCells(await readLayout(), cells))),
   setCols: ({ cols }) =>
@@ -476,4 +489,41 @@ browser.menus.onClicked.addListener(async (info, tab) => {
     await addItems([{ url: info.linkUrl, name, nameEdited: false, icon: { kind: 'site' } }], { fetchTitle: !name });
     flashBadge(tab.id);
   }
+});
+
+// ---- jump shortcut ------------------------------------------------------------
+
+// The desktop shows jump letters, but on a new tab the address bar keeps keyboard focus and
+// the page can't take it. What can get focus:
+// - the toolbar panel: on a desktop tab the shortcut opens a small one that passes the
+//   typed keys on to the desktop (popup/jump.js), so the tab doesn't reload;
+// - a tab the extension opens: on any other page the shortcut opens the desktop in a new
+//   tab next to it (Esc there closes it again, back to that page). It's also the fallback
+//   on a desktop tab if the panel can't open.
+const JUMP_POPUP = 'popup/jump.html';
+
+// In place of a desktop tab, or next to another page.
+async function openJumpTab(tab, onDesktop) {
+  const created = await browser.tabs.create({
+    url: `${NEWTAB_URL}#${onDesktop ? 'jump' : 'jump-back'}`,
+    windowId: tab.windowId,
+    index: onDesktop ? tab.index : tab.index + 1,
+    ...(onDesktop ? {} : { openerTabId: tab.id }),
+  });
+  if (onDesktop && created) await browser.tabs.remove(tab.id);
+}
+
+// Not async: openPopup() only works synchronously inside the shortcut's handler.
+browser.commands.onCommand.addListener((command, tab) => {
+  if (command !== 'jump' || !tab) return;
+  if (!String(tab.url ?? '').startsWith(NEWTAB_URL)) {
+    openJumpTab(tab, false);
+    return;
+  }
+  const reset = () => browser.action.setPopup({ tabId: tab.id, popup: null });
+  browser.action.setPopup({ tabId: tab.id, popup: `${JUMP_POPUP}?tab=${tab.id}` });
+  browser.action.openPopup().then(reset, () => {
+    reset();
+    openJumpTab(tab, true);
+  });
 });

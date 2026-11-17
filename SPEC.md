@@ -54,7 +54,7 @@ Permissions:
 
 Firefox behaviour to account for:
 
-- On every new tab, focus is in the address bar and an extension cannot take it. Desktop keyboard shortcuts work only after the user clicks or tabs into the desktop.
+- On every new tab, focus is in the address bar and the page cannot take it. Desktop keyboard shortcuts work only after the user clicks or tabs into the desktop. The one way around it: a tab the extension itself opens gets keyboard focus, which the jump shortcut (section 5.7) relies on.
 - Firefox shows its own "An extension changed your new tab" notice on install. If the user picks Restore, the extension is disabled; nothing to handle beyond that.
 - Private windows: the extension runs there only if the user allows it in Firefox. If allowed, it works the same way and links added there are saved like any other.
 
@@ -101,6 +101,7 @@ Sketch 1: the desktop (whole new tab)
 - Each icon is a real link (`<a href>`) with a 48 px image and a label (max two lines, ellipsis after). Hovering shows a tooltip with the full name; Firefox shows the URL in its status bar.
 - Icons sit on a grid. Rows extend downward and the desktop scrolls vertically if they don't fit.
 - Positions are stored as grid cells (`col`, `row`). Resizing the window never moves an icon to another cell: every column that holds an icon stays on screen. If those columns don't fit at full size, the whole desktop (cells, tiles, labels, spacing) shrinks as far as needed; a window wider than they need adds empty columns at full size.
+- A tile that holds extra links (section 5.7) looks like a small stack, with their count on its corner.
 - New icons go to the first free cell, left to right, top to bottom, or to the drop cell when dragged in.
 
 ### 5.2 Opening a link
@@ -226,11 +227,13 @@ Keyboard shortcuts, active only while the desktop has focus:
 | Ctrl+Z | Undo |
 | Shift+F10 / Menu key | Open the context menu for the focused icon |
 
+One shortcut works everywhere in Firefox, not only on the desktop: **Alt+J** for jump mode (changeable in Firefox's add-on shortcut settings).
+
 No shortcut uses a Firefox-reserved combination (Ctrl+N, Ctrl+T, Ctrl+W…).
 
 Undo:
 
-- Delete, move, swap, pack and rename can be undone with Ctrl+Z or the toast button, e.g. `Moved "Repo" · Undo`.
+- Delete, move, swap, pack, rename and adding a link to another (section 5.7) can be undone with Ctrl+Z or the toast button, e.g. `Moved "Repo" · Undo`.
 - The toast stays 6 s, or longer while hovered or focused.
 - Undo history lives only in the current tab and is lost when the tab closes.
 
@@ -265,6 +268,24 @@ Sketch 5: empty desktop
 - Each import button asks for its optional permission on click, then imports.
 - "Import bookmarks…" opens a picker with the bookmarks toolbar preselected.
 - The card disappears once there is at least one link. The same actions stay in the desktop menu and Settings.
+
+### 5.7 Extra links and jump mode
+
+A tile can hold extra links that share its spot: several repositories and the pull request page behind one GitHub tile, say. Clicking the tile still opens its own link; the others show only while the pointer is on the tile, so they never crowd the desktop. (They used to sit at the top of the right-click menu; that mixed links with actions, so they moved to hover.)
+
+- Up to 20 extra links per tile, each an address and a name. A name left empty becomes the address's last path segment ("linkdesk" for github.com/edsdck/linkdesk), else its host: the extra links usually share a site, so the host alone wouldn't tell them apart.
+- They share the tile's image; their names (and, in jump mode, paths) tell them apart.
+- Adding them: the link editor's "More" rows (section 7), or **Alt+drag** one tile onto another. While dragging one icon over another, a label under that cell says "Hold Alt to add to “GitHub”"; with Alt held it reads "Add to “GitHub”" and the cell shows "+" instead of the swap arrow; dropping makes the dragged tile an extra link of the other, its own extra links following it. One icon at a time; a toast offers Undo.
+- **Hover**: pointing at a stacked tile shows its extra links at once, in a list just below its cell (above it near the bottom of the window): name, then path. Each is a real link, so click opens it here and middle-click / Ctrl+click in a new tab. Leaving both the tile and the list closes it after 150 ms (time to cross between them); pressing the tile, scrolling or jump mode closes it too. Clicks in the list's first 120 ms are ignored: they were aimed at whatever the list now covers. Stacked tiles have no tooltip, which would cover the list.
+- Right-click shows only the usual items (section 5.5).
+
+Jump mode, as in AceJump or Vimium: every icon shows a short code of letters (home row first: A, S, D, F…; two letters once there are more icons than letters, none a prefix of another). Typing a code acts at once, no Enter.
+
+- **Alt+J** anywhere in Firefox (there is no in-page key: a new tab opens with focus in the address bar, where it would never arrive), or the taskbar's Jump button. On another page Alt+J opens the desktop in a new tab next to it, already in jump mode; Esc there closes that tab again, back to the page. On a desktop tab, where the address bar usually has focus, Alt+J opens a small Linkdesk panel from the toolbar button instead: the panel gets keyboard focus (the page can't) and passes each key to the desktop, which shows the letters as usual. The panel closes when a link opens or jump mode ends, and closing it (Esc, a click elsewhere) ends jump mode. If the panel can't open, Alt+J falls back to replacing the tab with a fresh one, which gets focus.
+- A code for a tile without extra links opens it in the current tab. Shift on the last letter opens it in a new background tab.
+- A tile with extra links shows them in a list below it, its own link first, each with a letter code, name and path; typing a code opens that link (Shift: new tab). Esc goes back to the icon codes.
+- Letters that match no code are ignored; Backspace removes the last typed letter; icons whose codes no longer match fade. Esc, or a click outside the list, leaves jump mode.
+- Codes follow reading order, so they stay the same until icons move.
 
 ## 6. Adding links
 
@@ -341,6 +362,8 @@ Sketch 8: link editor
 └─────────────────────────────────────────────────────────┘
 ```
 
+The editor also has a **More** section: one row per extra link (address, name, up, down, remove) and "Add link", hidden at 20 rows. Empty rows are dropped on save; a row whose address isn't a web address keeps the dialog open with that field marked.
+
 ## 8. Fetching titles and favicons
 
 Runs in the background script after the icon is already shown as a letter tile.
@@ -371,6 +394,7 @@ Rules:
 ## 9. Taskbar
 
 - **Settings** button (left).
+- **Jump** button next to Settings, followed by its shortcut in quieter text (Alt+J, or whatever it is set to in Firefox; nothing if unset): starts jump mode.
 - **Clock** (right): time and date always shown, format from the locale.
 - No start menu or search in v1.
 
@@ -421,6 +445,9 @@ Small keys, so a move never rewrites image data.
           "source": "https://github.com/favicon.ico", // site only, for Refresh / retry
           "text": "G", "color": "#3b82f6"             // letter only
         },
+        "more": [                            // extra links, at most 20, in menu order
+          { "url": "https://github.com/pulls", "name": "Pull requests" }
+        ],
         "cell": { "col": 0, "row": 0 },
         "createdAt": 1767225600000,
         "updatedAt": 1767225600000

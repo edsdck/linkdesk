@@ -161,6 +161,14 @@ body:has(#desktop[data-wallpaper="midnight"]) #taskbar {
 #editor .icon-field { align-items: start; grid-template-columns: 56px auto 1fr; }
 #editor legend { float: left; width: 56px; padding: 0; margin-top: 4px; }
 #editor .preview .tile { --tile: 64px; }
+#editor .more-field { align-items: start; }
+#editor-more { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 6px; }
+#editor-more:empty { display: none; }
+#editor-more li { display: grid; grid-template-columns: 1.4fr 1fr auto auto auto; gap: 4px; align-items: center; }
+#editor-more li input { min-width: 0; }
+#editor-more li input[aria-invalid="true"] { border-color: var(--danger); }
+#editor-more li button { min-width: 28px; min-height: 28px; padding: 0 6px; }
+#editor .more-field .note { margin: 6px 0 0; }
 .icon-options { display: grid; gap: 8px; }
 .icon-option { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; min-height: 32px; }
 .icon-option > label { display: flex; gap: 6px; align-items: center; min-width: 88px; }
@@ -190,4 +198,94 @@ body:has(#desktop[data-wallpaper="midnight"]) #taskbar {
 
 @media (prefers-reduced-motion: no-preference) {
   .icon { transition: background-color 80ms; }
+}
+
+/* ---- extra links ------------------------------------------------------------ */
+
+/* A tile holding extra links looks like a small stack, with their count. */
+.icon.has-more .tile {
+  box-shadow: 3px -3px 0 -1px rgb(128 128 128 / 0.55), 6px -6px 0 -2px rgb(128 128 128 / 0.3), 0 1px 3px rgb(0 0 0 / 0.2);
+}
+.more-count {
+  position: absolute;
+  left: calc(50% + var(--tile) / 2 - 11px);
+  top: calc(8px * var(--scale, 1) + var(--tile) - 11px);
+  min-width: 16px; height: 16px; padding: 0 4px;
+  border-radius: 8px;
+  background: var(--text); color: var(--page-bg);
+  font-size: 10.5px; font-weight: 600; line-height: 16px; text-align: center;
+  box-shadow: 0 0 0 2px var(--page-bg);
+  pointer-events: none;
+}
+/* Alt held while dragging onto another icon: add to it instead of swapping. */
+.drop-target.merge::after {
+  content: "+";
+  position: absolute; top: 0; right: 6px;
+  color: var(--accent); font-weight: 700; font-size: 16px;
+}
+#desktop:not([data-wallpaper="plain"]) .drop-target.merge::after { color: #fff; text-shadow: 0 0 2px #000; }
+
+/* ---- jump mode ------------------------------------------------------------------ */
+
+#jump { position: absolute; inset: 0; pointer-events: none; z-index: 5; }
+.jump-hint {
+  position: absolute;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: #ffd567; color: #15141a;
+  font: 700 12px/1.35 ui-monospace, "Cascadia Mono", Consolas, monospace;
+  text-transform: uppercase;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.45);
+}
+.jump-hint .typed { opacity: 0.4; }
+#desktop.jumping .icon.jump-miss { opacity: 0.35; }
+#jump-list {
+  position: fixed; z-index: 20;
+  min-width: 220px; max-width: 360px; padding: 5px;
+  background: var(--surface-raised); color: var(--text);
+  border: 1px solid var(--border); border-radius: 10px;
+  box-shadow: var(--shadow);
+}
+.jump-row {
+  display: grid; grid-template-columns: auto auto 1fr; gap: 8px; align-items: baseline;
+  padding: 5px 8px; border-radius: 5px; cursor: default;
+}
+.jump-row:hover { background: rgb(128 128 128 / 0.16); }
+.jump-row .jump-hint { position: static; }
+.jump-row.main .name { font-weight: 600; }
+.jump-row .path { color: var(--text-secondary); font-size: var(--font-size-small); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (forced-colors: active) {
+  .jump-hint { forced-color-adjust: none; background: Highlight; color: HighlightText; }
+}
+
+/* ---- taskbar Jump button, hover list, drag hint ------------------------------------------------ */
+
+.taskbar-start { display: flex; align-items: center; gap: 2px; }
+#taskbar #jump-button { display: flex; gap: 6px; align-items: center; font-size: var(--font-size-small); }
+#jump-shortcut { opacity: 0.6; }
+#jump-shortcut:empty { display: none; }
+
+/* A stacked tile's extra links, shown while the pointer is on the tile or the list. */
+#more-list {
+  position: fixed; z-index: 15;
+  min-width: 200px; max-width: 360px; padding: 4px;
+  display: grid;
+  background: var(--surface-raised); color: var(--text);
+  border: 1px solid var(--border); border-radius: 10px;
+  box-shadow: var(--shadow);
+}
+.more-row {
+  display: grid; grid-template-columns: auto 1fr; gap: 8px; align-items: baseline;
+  padding: 6px 10px; border-radius: 6px;
+  color: inherit; text-decoration: none;
+}
+.more-row:hover, .more-row:focus-visible { background: color-mix(in srgb, var(--accent) 18%, transparent); outline: none; }
+.more-row .path { color: var(--text-secondary); font-size: var(--font-size-small); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* While dragging over another icon: what holding Alt does. */
+.drag-hint {
+  position: absolute; transform: translateX(-50%);
+  padding: 2px 8px; border-radius: 10px; white-space: nowrap;
+  background: var(--surface-raised); color: var(--text); box-shadow: var(--shadow);
+  font-size: var(--font-size-small);
 }

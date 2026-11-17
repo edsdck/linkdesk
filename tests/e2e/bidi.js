@@ -105,7 +105,8 @@ export class Firefox {
     const deadline = Date.now() + 10_000;
     while (Date.now() < deadline) {
       const { contexts } = await this.send('browsingContext.getTree', {});
-      const found = contexts.find((c) => c.url === url && !before.has(c.context));
+      // A page may drop its #hash once loaded (the desktop does for #jump).
+      const found = contexts.find((c) => (c.url === url || c.url === url.split('#')[0]) && !before.has(c.context));
       if (found) {
         await this.waitFor(found.context, () => document.readyState === 'complete');
         return found.context;

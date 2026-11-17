@@ -35,6 +35,12 @@
     "page": "options/options.html",
     "open_in_tab": true
   },
+  "commands": {
+    "jump": {
+      "suggested_key": { "default": "Alt+J" },
+      "description": "Jump to a link on the desktop"
+    }
+  },
   "permissions": ["storage", "menus", "menus.overrideContext", "activeTab", "scripting", "theme"],
   "optional_permissions": ["bookmarks", "topSites"],
   "optional_host_permissions": ["<all_urls>"]

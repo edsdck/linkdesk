@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="color-scheme" content="light dark">
+  <title>Jump</title>
+  <link rel="stylesheet" href="../shared/base.css">
+  <style>
+    body { margin: 0; padding: 10px 14px; min-width: 200px; background: var(--page-bg); color: var(--text); font-size: var(--font-size-small); }
+    p { margin: 0; }
+    #typed { font: 700 13px ui-monospace, "Cascadia Mono", Consolas, monospace; text-transform: uppercase; margin-left: 6px; }
+    .note { margin-top: 2px; }
+  </style>
+  <script type="module" src="jump.js"></script>
+</head>
+<body>
+  <!-- Keyboard focus lands here (a new tab's page can't take it from the address bar),
+       so the keys typed here are sent to the desktop, which shows the letters. -->
+  <p id="status">Type the letters on a link<span id="typed"></span></p>
+  <p class="note">Esc to cancel</p>
+</body>
+</html>

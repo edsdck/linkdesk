@@ -1,7 +1,7 @@
 // Export / import file format. Validation is pure; the background script
 // re-encodes every accepted image before storing it.
 
-import { cleanIcon, MAX_NAME, MAX_URL, normalizeSettings, UserError } from './model.js';
+import { cleanIcon, cleanMore, MAX_NAME, MAX_URL, normalizeSettings, UserError } from './model.js';
 import { isHttpUrl } from './url.js';
 
 export const FORMAT = 'linkdesk';
@@ -22,7 +22,7 @@ export function buildExport({ layout, settings, icons, wallpaperImage }, now) {
     version: FORMAT_VERSION,
     exportedAt: new Date(now).toISOString(),
     settings,
-    links: layout.links.map(({ url, name, nameEdited, icon, cell, id }) => ({ id, url, name, nameEdited, icon, cell })),
+    links: layout.links.map(({ url, name, nameEdited, icon, more, cell, id }) => ({ id, url, name, nameEdited, icon, ...(more.length ? { more } : {}), cell })),
     icons,
     ...(wallpaperImage ? { wallpaperImage } : {}),
   };
@@ -50,6 +50,7 @@ export function validateImport(data) {
       name: String(link.name ?? '').slice(0, MAX_NAME),
       nameEdited: Boolean(link.nameEdited),
       icon,
+      more: cleanMore(link.more),
       cell: link.cell,
     };
     if (icon.kind !== 'letter' && isSafeImageDataUrl(iconData, MAX_ICON_CHARS)) item.iconData = iconData;

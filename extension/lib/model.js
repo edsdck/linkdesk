@@ -10,6 +10,8 @@ export const ICON_KINDS = ['site', 'upload', 'letter'];
 export const ICON_SIZES = ['s', 'm', 'l'];
 export const WALLPAPER_PRESETS = ['plain', 'dawn', 'ocean', 'forest', 'dusk', 'midnight'];
 export const MAX_NAME = 200;
+// Extra links a tile can hold (shown on right-click and in jump mode).
+export const MAX_MORE = 20;
 export { MAX_URL };
 
 // Errors whose message is safe to show to the user as is.
@@ -53,6 +55,32 @@ export function cleanIcon(icon, url) {
   return clean;
 }
 
+// A name for an extra link without one: its last path segment ("linkdesk" for
+// github.com/edsdck/linkdesk), else the host. Extra links share their tile's site, so
+// the host alone rarely tells them apart.
+export function nameFromUrl(url) {
+  try {
+    const { pathname } = new URL(url);
+    const last = pathname.split('/').filter(Boolean).pop();
+    return last ? decodeURIComponent(last).slice(0, MAX_NAME) : hostOf(url);
+  } catch {
+    return hostOf(url);
+  }
+}
+
+// Extra links: [{ url, name }], web URLs only, at most MAX_MORE. Never throws.
+export function cleanMore(raw) {
+  if (!Array.isArray(raw)) return [];
+  const more = [];
+  for (const item of raw) {
+    if (more.length >= MAX_MORE) break;
+    if (!item || !isWebUrl(item.url)) continue;
+    const name = String(item.name ?? '').trim().slice(0, MAX_NAME);
+    more.push({ url: item.url, name: name || nameFromUrl(item.url) });
+  }
+  return more;
+}
+
 // Brings any stored value up to the current layout shape. Never throws.
 export function migrate(raw) {
   if (!raw || typeof raw !== 'object' || !Array.isArray(raw.links)) return emptyLayout();
@@ -67,6 +95,7 @@ export function migrate(raw) {
       name: String(link.name ?? '').slice(0, MAX_NAME) || hostOf(link.url),
       nameEdited: Boolean(link.nameEdited),
       icon: cleanIcon(link.icon, link.url),
+      more: cleanMore(link.more),
       cell: isCell(link.cell) ? { col: link.cell.col, row: link.cell.row } : { col: 0, row: 0 },
       createdAt: Number(link.createdAt) || 0,
       updatedAt: Number(link.updatedAt) || 0,
@@ -102,7 +131,7 @@ function occupiedOf(layout) {
   return new Set(layout.links.map((link) => cellKey(link.cell)));
 }
 
-// items: [{ url, name?, nameEdited?, icon?, cell? }]. Invalid URLs are skipped.
+// items: [{ url, name?, nameEdited?, icon?, more?, cell? }]. Invalid URLs are skipped.
 export function addLinks(layout, items, { now, newId }) {
   const occupied = occupiedOf(layout);
   const added = [];
@@ -122,6 +151,7 @@ export function addLinks(layout, items, { now, newId }) {
       name: name || hostOf(item.url),
       nameEdited: Boolean(item.nameEdited && name),
       icon: cleanIcon(item.icon, item.url),
+      more: cleanMore(item.more),
       cell,
       createdAt: now,
       updatedAt: now,
@@ -142,6 +172,7 @@ export function updateLink(layout, id, patch, now) {
       next.nameEdited = Boolean(name) && (patch.nameEdited ?? true);
     }
     if (patch.icon !== undefined) next.icon = cleanIcon(patch.icon, url);
+    if (patch.more !== undefined) next.more = cleanMore(patch.more);
     updated = next;
     return next;
   });
@@ -179,6 +210,23 @@ export function setCells(layout, cells) {
     return { ...link, cell: { col: cell.col, row: cell.row } };
   });
   return { ...layout, links: resolveClashes(links, layout.cols, moved) };
+}
+
+// Turns link `sourceId` into an extra link of `targetId`, its own extra links following it.
+// Returns the removed source and the target's previous extra links (for undo).
+export function mergeLinks(layout, sourceId, targetId, now) {
+  const source = layout.links.find((link) => link.id === sourceId);
+  const target = layout.links.find((link) => link.id === targetId);
+  if (!source || !target || source === target) throw new UserError('That link was deleted.');
+  const incoming = [{ url: source.url, name: source.name }, ...source.more];
+  if (target.more.length + incoming.length > MAX_MORE) {
+    throw new UserError(`“${target.name}” can hold up to ${MAX_MORE} links.`);
+  }
+  const previousMore = target.more;
+  const links = layout.links
+    .filter((link) => link.id !== sourceId)
+    .map((link) => (link.id === targetId ? { ...link, more: cleanMore([...link.more, ...incoming]), updatedAt: now } : link));
+  return { layout: { ...layout, links }, removed: source, previousMore };
 }
 
 export function findDuplicate(layout, url, exceptId) {

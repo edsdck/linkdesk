@@ -1,7 +1,7 @@
 // The link editor dialog (spec section 7).
 
 import { toIconPng } from '../lib/image.js';
-import { findDuplicate } from '../lib/model.js';
+import { findDuplicate, MAX_MORE } from '../lib/model.js';
 import { colorFor, graphemes, hostOf, letterFor, normalizeUrl } from '../lib/url.js';
 import { openSettings, send, swatches, tile } from '../shared/ui.js';
 
@@ -15,6 +15,8 @@ const letterInput = $('editor-letter');
 const preview = $('editor-preview');
 const fileInput = $('editor-file');
 const iconNote = $('editor-icon-note');
+const moreList = $('editor-more');
+const moreAdd = $('editor-more-add');
 
 let session = null;
 
@@ -183,6 +185,65 @@ dialog.addEventListener('paste', async (event) => {
   }
 });
 
+// ---- more links: rows of address + name, in the order shown on hover ----
+
+function moreRow(item = { url: '', name: '' }) {
+  const url = Object.assign(document.createElement('input'), {
+    type: 'url', value: item.url, placeholder: 'https://…', autocomplete: 'off', spellcheck: false,
+  });
+  url.setAttribute('aria-label', 'Address');
+  const name = Object.assign(document.createElement('input'), { type: 'text', value: item.name, placeholder: 'Name', maxLength: 200, autocomplete: 'off' });
+  name.setAttribute('aria-label', 'Name');
+  url.addEventListener('input', () => url.removeAttribute('aria-invalid'));
+  const button = (text, label, onClick) => {
+    const b = Object.assign(document.createElement('button'), { type: 'button', textContent: text, title: label });
+    b.setAttribute('aria-label', label);
+    b.addEventListener('click', onClick);
+    return b;
+  };
+  const li = document.createElement('li');
+  li.append(
+    url,
+    name,
+    button('↑', 'Move up', () => { li.previousElementSibling?.before(li); }),
+    button('↓', 'Move down', () => { li.nextElementSibling?.after(li); }),
+    button('✕', 'Remove', () => {
+      (li.nextElementSibling ?? li.previousElementSibling)?.querySelector('input')?.focus();
+      li.remove();
+      updateMoreAdd();
+    }),
+  );
+  return li;
+}
+
+function updateMoreAdd() {
+  moreAdd.hidden = moreList.children.length >= MAX_MORE;
+}
+
+moreAdd.addEventListener('click', () => {
+  const row = moreRow();
+  moreList.append(row);
+  updateMoreAdd();
+  row.querySelector('input').focus();
+});
+
+// [{ url, name }] from the rows, or null (with the first bad address focused) if one isn't a web address.
+function readMore() {
+  const more = [];
+  for (const li of moreList.children) {
+    const [urlField, nameField] = li.querySelectorAll('input');
+    if (!urlField.value.trim()) continue;
+    const url = normalizeUrl(urlField.value);
+    if (!url) {
+      urlField.setAttribute('aria-invalid', 'true');
+      urlField.focus();
+      return null;
+    }
+    more.push({ url, name: nameField.value.trim() });
+  }
+  return more;
+}
+
 $('editor-cancel').addEventListener('click', () => dialog.close());
 $('editor-delete').addEventListener('click', () => {
   const { link, onDelete } = session;
@@ -201,6 +262,8 @@ form.addEventListener('submit', async (event) => {
     urlInput.focus();
     return;
   }
+  const more = readMore();
+  if (!more) return;
   const name = nameInput.value.trim();
   const k = kind();
   let icon;
@@ -230,7 +293,7 @@ form.addEventListener('submit', async (event) => {
       const retitle = link.url !== url && !nameEdited;
       await send('updateLink', {
         id: link.id,
-        patch: { url, name: retitle ? '' : name, nameEdited, icon: keepSite ? link.icon : icon },
+        patch: { url, name: retitle ? '' : name, nameEdited, icon: keepSite ? link.icon : icon, more },
         iconData,
         refetch: k === 'site' && !iconData && !keepSite,
         fetchTitle: retitle,
@@ -238,7 +301,7 @@ form.addEventListener('submit', async (event) => {
       onSaved?.({ type: 'edit', link });
     } else {
       const ids = await send('addLinks', {
-        items: [{ url, name, nameEdited, icon, iconData, cell }],
+        items: [{ url, name, nameEdited, icon, iconData, more, cell }],
         meta: { fetchTitle: !name },
       });
       onSaved?.({ type: 'add', ids, name: name || hostOf(url) });
@@ -275,6 +338,8 @@ export function openEditor(opts) {
   showNote('');
   renderColors();
   checkUrl();
+  moreList.replaceChildren(...(link?.more ?? []).map((item) => moreRow(item)));
+  updateMoreAdd();
   dialog.showModal();
   (link ? nameInput : urlInput).focus();
 }

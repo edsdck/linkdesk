@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
-  addLinks, emptyLayout, findDuplicate, migrate, normalizeSettings, removeLinks, restoreLinks, setCells, updateLink,
+  addLinks, cleanMore, emptyLayout, findDuplicate, MAX_MORE, mergeLinks, migrate, nameFromUrl, normalizeSettings, removeLinks,
+  restoreLinks, setCells, updateLink,
 } from '../extension/lib/model.js';
 
 let counter = 0;
@@ -137,4 +138,50 @@ test('normalizeSettings falls back to defaults', () => {
   assert.deepEqual(normalizeSettings({ iconSize: 'xl', wallpaper: { kind: 'preset', value: 'mars' } }).wallpaper.value, 'plain');
   assert.equal(normalizeSettings({ iconSize: 'l' }).iconSize, 'l');
   assert.equal(normalizeSettings({ wallpaper: { kind: 'preset', value: 'midnight' } }).wallpaper.value, 'midnight');
+});
+
+test('extra links keep web URLs only, are capped, and get a name from the path', () => {
+  const more = cleanMore([
+    { url: 'https://github.com/edsdck/linkdesk' },
+    { url: 'javascript:alert(1)', name: 'bad' },
+    { url: 'https://github.com/pulls', name: '  Pull requests ' },
+    null,
+    { url: 'https://github.com/' },
+  ]);
+  assert.deepEqual(more, [
+    { url: 'https://github.com/edsdck/linkdesk', name: 'linkdesk' },
+    { url: 'https://github.com/pulls', name: 'Pull requests' },
+    { url: 'https://github.com/', name: 'github.com' },
+  ]);
+  assert.equal(cleanMore(Array.from({ length: 30 }, (_, i) => ({ url: `https://a.com/${i}` }))).length, MAX_MORE);
+  assert.deepEqual(cleanMore('nope'), []);
+  assert.equal(nameFromUrl('https://a.com/x/My%20Board/'), 'My Board');
+});
+
+test('migrate, addLinks and updateLink keep extra links', () => {
+  const layout = migrate({ links: [{ id: 'a', url: 'https://a.com/', more: [{ url: 'https://a.com/x', name: 'X' }] }] });
+  assert.deepEqual(layout.links[0].more, [{ url: 'https://a.com/x', name: 'X' }]);
+  assert.deepEqual(migrate({ links: [{ id: 'b', url: 'https://b.com/' }] }).links[0].more, []);
+  const { added } = addLinks(emptyLayout(), [{ url: 'https://c.com/', more: [{ url: 'https://c.com/y' }] }], opts());
+  assert.deepEqual(added[0].more, [{ url: 'https://c.com/y', name: 'y' }]);
+  const { link } = updateLink(layout, 'a', { more: [{ url: 'https://a.com/z', name: 'Z' }] }, 2000);
+  assert.deepEqual(link.more, [{ url: 'https://a.com/z', name: 'Z' }]);
+  assert.deepEqual(updateLink(layout, 'a', { name: 'A' }, 2000).link.more, layout.links[0].more, 'untouched without a patch');
+});
+
+test('mergeLinks turns one link into an extra link of another, its own extra links after it', () => {
+  const layout = migrate({
+    links: [
+      { id: 'gh', url: 'https://github.com/', name: 'GitHub', more: [{ url: 'https://github.com/pulls', name: 'PRs' }] },
+      { id: 'ld', url: 'https://github.com/edsdck/linkdesk', name: 'linkdesk', more: [{ url: 'https://github.com/edsdck/linkdesk/issues', name: 'Issues' }], cell: { col: 1, row: 0 } },
+    ],
+  });
+  const { layout: next, removed, previousMore } = mergeLinks(layout, 'ld', 'gh', 5);
+  assert.deepEqual(next.links.map((link) => link.id), ['gh']);
+  assert.deepEqual(next.links[0].more.map((item) => item.name), ['PRs', 'linkdesk', 'Issues']);
+  assert.equal(removed.id, 'ld');
+  assert.deepEqual(previousMore, [{ url: 'https://github.com/pulls', name: 'PRs' }]);
+  assert.throws(() => mergeLinks(layout, 'gh', 'gh', 5), /deleted/);
+  const full = migrate({ links: [{ id: 'a', url: 'https://a.com/', more: Array.from({ length: MAX_MORE }, (_, i) => ({ url: `https://a.com/${i}` })) }, { id: 'b', url: 'https://b.com/', cell: { col: 1, row: 0 } }] });
+  assert.throws(() => mergeLinks(full, 'b', 'a', 5), /up to 20 links/);
 });

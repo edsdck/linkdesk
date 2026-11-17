@@ -1,6 +1,7 @@
 // The desktop: grid of links, moving, selection, menus, paste and drop, undo.
 
 import * as grid from '../lib/grid.js';
+import { hintCodes } from '../lib/hints.js';
 import { DESKTOP_IDS, MIN_PASTE_VERSION, PASTE_ID } from '../lib/menus.js';
 import { migrate, normalizeSettings } from '../lib/model.js';
 import { hostOf, parseLinkText } from '../lib/url.js';
@@ -14,6 +15,9 @@ const gridEl = $('grid');
 const dotsEl = $('dots');
 const dropEl = $('drop-target');
 const targetsEl = $('targets');
+const jumpEl = $('jump');
+const jumpListEl = $('jump-list');
+const moreListEl = $('more-list');
 const bandEl = $('band');
 
 // The single source for icon sizes; CSS reads them as variables.
@@ -23,11 +27,11 @@ const SIZES = {
   l: { tile: 64, w: 120, h: 128 },
 };
 const PAD = 24;
+const ICON_PAD_TOP = 8; // .icon padding-top at full size, scaled in CSS by --scale
 const DRAG_THRESHOLD = 4;
 const TOAST_MS = 6000;
 const SCROLL_EDGE = 40;
 const DIRECTIONS = { ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down' };
-const ICON_PAD_TOP = 8; // .icon padding-top at full size, scaled in CSS by --scale
 
 const state = {
   stored: migrate(null), // layout as last read from storage
@@ -36,11 +40,11 @@ const state = {
   icons: new Map(),
   wallpaperImage: null,
   cols: 1,
+  scale: 1, // < 1 while the window is too narrow for the used columns at full size
   display: new Map(),
   selected: new Set(),
   focusId: null,
   tabId: null,
-  scale: 1, // < 1 while the window is too narrow for the used columns at full size
   menuTarget: null,
   menuCell: null,
 };
@@ -141,12 +145,16 @@ function iconNode(link, existing) {
     el('span', { class: 'label' }),
   ]);
   const iconData = state.icons.get(link.id);
-  const look = JSON.stringify([link.url, link.name, link.icon, iconData?.length, iconData?.slice(-32)]);
+  const more = link.more.length;
+  const look = JSON.stringify([link.url, link.name, link.icon, more, iconData?.length, iconData?.slice(-32)]);
   if (node.dataset.look !== look) {
     node.dataset.look = look;
     node.href = link.url;
-    node.title = link.name;
+    node.title = more ? '' : link.name; // a stacked tile shows its links on hover; a tooltip would cover them
     node.querySelector('.tile').replaceWith(tile(link, iconData));
+    node.classList.toggle('has-more', more > 0);
+    node.querySelector('.more-count')?.remove();
+    if (more) node.append(el('span', { class: 'more-count', 'aria-hidden': 'true', text: String(more) }));
     const label = node.querySelector('.label');
     if (label) label.textContent = link.name;
   }
@@ -185,21 +193,21 @@ function render() {
     renderQueued = true;
     return;
   }
-  const size = metrics();
-  desktop.dataset.size = state.settings.iconSize;
-  desktop.style.setProperty('--tile', `${size.tile}px`);
-  desktop.style.setProperty('--cell-w', `${size.w}px`);
-  desktop.style.setProperty('--cell-h', `${size.h}px`);
-  applyWallpaper(desktop, state.settings, state.wallpaperImage);
-  state.display = grid.displayCells(state.layout.links, state.cols);
   // Every column that holds an icon stays on screen: the grid shrinks rather than move icons.
   const usedCols = state.layout.links.reduce((max, link) => Math.max(max, link.cell.col + 1), 1);
   const fit = grid.fitGrid(desktop.clientWidth, SIZES[state.settings.iconSize].w, PAD, usedCols);
   state.cols = fit.cols;
   state.scale = fit.scale;
+  const size = metrics();
+  desktop.dataset.size = state.settings.iconSize;
+  desktop.style.setProperty('--scale', String(state.scale));
+  desktop.style.setProperty('--tile', `${size.tile}px`);
+  desktop.style.setProperty('--cell-w', `${size.w}px`);
+  desktop.style.setProperty('--cell-h', `${size.h}px`);
+  applyWallpaper(desktop, state.settings, state.wallpaperImage);
+  state.display = grid.displayCells(state.layout.links, state.cols);
 
   const ids = new Set(state.layout.links.map((link) => link.id));
-  desktop.style.setProperty('--scale', String(state.scale));
   for (const id of state.selected) if (!ids.has(id)) state.selected.delete(id);
   if (state.focusId && !ids.has(state.focusId)) state.focusId = null;
 
@@ -286,7 +294,7 @@ $('toast-undo').addEventListener('click', async () => {
   (iconEl(state.focusId) ?? desktop).focus({ preventScroll: true });
 });
 
-// entry: { kind: 'cells' | 'restore' | 'remove' | 'rename', ready?, ... }. Undo lives only in this tab.
+// entry: { kind: 'cells' | 'restore' | 'remove' | 'rename' | 'merge', ready?, ... }. Undo lives only in this tab.
 function pushUndo(entry, message) {
   entry.message = message;
   undoStack.push(entry);
@@ -307,6 +315,9 @@ async function undo(entry = undoStack.at(-1)) {
       await send('restoreLinks', { items: entry.items });
     } else if (entry.kind === 'remove') {
       await send('deleteLinks', { ids: entry.ids });
+    } else if (entry.kind === 'merge') {
+      await send('restoreLinks', { items: entry.items });
+      await send('updateLink', { id: entry.targetId, patch: { more: entry.more } });
     } else if (entry.kind === 'rename') {
       await send('updateLink', { id: entry.id, patch: { name: entry.name, nameEdited: entry.nameEdited } });
     }
@@ -352,6 +363,26 @@ function focusAfterDelete(ids) {
   const index = order.indexOf(state.focusId);
   if (index < 0 || !gone.has(state.focusId)) return state.focusId;
   return order.slice(index + 1).find((id) => !gone.has(id)) ?? order.slice(0, index).reverse().find((id) => !gone.has(id)) ?? null;
+}
+
+// Alt-drop: the dropped link becomes an extra link of the one it was dropped on.
+async function mergeInto(sourceId, targetId) {
+  const source = linkById(sourceId);
+  const target = linkById(targetId);
+  if (!source || !target) return;
+  try {
+    const { link, iconData, previousMore } = await send('mergeLinks', { sourceId, targetId });
+    state.selected.delete(sourceId);
+    pushUndo({ kind: 'merge', items: [{ link, iconData }], targetId, more: previousMore }, `Added “${source.name}” to “${target.name}”`);
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
+// Opens a link here, or in a new background tab.
+function openUrl(url, newTab = false) {
+  if (newTab) browser.tabs.create({ url, active: false });
+  else location.assign(url);
 }
 
 async function deleteIds(ids) {
@@ -501,7 +532,24 @@ function showDots(ids) {
 // the way shows the swap arrow. Nothing is outlined when the drop would be refused.
 function showMoveTargets() {
   const nodes = [];
-  if (drag.next) {
+  // Over another icon with one icon in hand: say what Alt does (adds it to that icon).
+  const over = drag.ids.length === 1 && drag.cell ? grid.idAt(state.display, drag.cell) : null;
+  if (over && over !== drag.id) {
+    const { left, top } = cellPos(drag.cell);
+    const { w, h } = metrics();
+    const name = linkById(over)?.name ?? '';
+    const hint = el('span', { class: 'drag-hint', text: drag.merge ? `Add to “${name}”` : `Hold Alt to add to “${name}”` });
+    hint.style.left = `${left + w / 2}px`;
+    hint.style.top = `${top + h + 2}px`;
+    nodes.push(hint);
+  }
+  if (drag.merge) {
+    const { left, top } = cellPos(state.display.get(drag.merge));
+    const node = el('span', { class: 'drop-target merge' });
+    node.style.left = `${left}px`;
+    node.style.top = `${top}px`;
+    nodes.push(node);
+  } else if (drag.next) {
     const moving = new Set(drag.ids);
     for (const id of drag.ids) {
       const cell = drag.next.get(id);
@@ -515,13 +563,25 @@ function showMoveTargets() {
     }
   }
   targetsEl.replaceChildren(...nodes);
+  // Centred under the cell, but never cut off at the window's edges.
+  const hintEl = targetsEl.querySelector('.drag-hint');
+  if (hintEl) {
+    const r = hintEl.getBoundingClientRect();
+    const d = desktop.getBoundingClientRect();
+    const shift = Math.max(d.left + 4 - r.left, 0) || Math.min(d.right - 4 - r.right, 0);
+    if (shift) hintEl.style.left = `${parseFloat(hintEl.style.left) + shift}px`;
+  }
 }
 
 // Where the group would end up with the pointer's cell as the pressed icon's new cell.
 function updateMoveTarget() {
   const cell = cellAt(drag.x, drag.y);
+  drag.cell = cell;
   const offset = cell && { col: cell.col - drag.origin.col, row: cell.row - drag.origin.row };
   drag.next = offset && grid.moveGroup(state.display, drag.ids, offset, state.cols);
+  // Holding Alt over another icon adds the dragged one to it (one icon at a time).
+  const other = cell && drag.alt && drag.ids.length === 1 ? grid.idAt(state.display, cell) : null;
+  drag.merge = other && other !== drag.id ? other : null;
   showMoveTargets();
 }
 
@@ -591,6 +651,8 @@ function autoScroll() {
 }
 
 function updateDrag(event) {
+  drag.alt = event.altKey;
+  if (event.altKey) altUsed = true;
   drag.x = event.clientX;
   drag.y = event.clientY;
   drag.ghost.style.left = `${event.clientX}px`;
@@ -609,14 +671,15 @@ function swallowNextClick() {
 }
 
 function endDrag(commit) {
-  const { id, ids, ghost, nodes, next, scroller } = drag;
+  const { id, ids, ghost, nodes, next, merge, scroller } = drag;
   cancelAnimationFrame(scroller);
   ghost.remove();
   for (const node of nodes) node.classList.remove('origin');
   dotsEl.replaceChildren();
   targetsEl.replaceChildren();
   drag = null;
-  if (commit && next) commitCells(next, ids.length > 1 ? `Moved ${ids.length} links` : `Moved “${linkById(id)?.name}”`);
+  if (commit && merge) mergeInto(id, merge);
+  else if (commit && next) commitCells(next, ids.length > 1 ? `Moved ${ids.length} links` : `Moved “${linkById(id)?.name}”`);
   // Storage updates that arrived during the move were held back; paint them now.
   if (renderQueued) render();
 }
@@ -726,7 +789,30 @@ function desktopHasFocus() {
   return desktop.contains(active) && !$('empty').contains(active);
 }
 
+// Alt pressed or released mid-drag switches between move/swap and add-to.
+let altUsed = false; // Alt was held during a drag: its release must not open the menu bar
+document.addEventListener('keyup', (event) => {
+  if (event.key !== 'Alt') return;
+  if (drag || altUsed) event.preventDefault(); // keeps Windows from opening the menu bar
+  altUsed = false;
+  if (drag) {
+    drag.alt = false;
+    updateMoveTarget();
+  }
+});
+
 document.addEventListener('keydown', (event) => {
+  if (jump) {
+    jumpKey(event);
+    return;
+  }
+  if (drag && event.key === 'Alt') {
+    event.preventDefault();
+    altUsed = true;
+    drag.alt = true;
+    updateMoveTarget();
+    return;
+  }
   if (drag && event.key === 'Escape') {
     event.preventDefault();
     swallowRelease = true;
@@ -910,6 +996,265 @@ browser.menus.onClicked.addListener((info, tab) => {
   runMenuCommand(id.slice('desk:'.length));
 });
 
+// ---- extra links on hover ---------------------------------------------------------
+
+// Pointing at a stacked tile shows its extra links right away, below it. Each is a real
+// link, so middle-click and Ctrl+click open a new tab as on any link.
+const MORE_CLICK_GRACE_MS = 120; // a click this soon after the list appears was aimed at what it now covers
+const MORE_CLOSE_MS = 150; // time to cross from the tile to the list
+let moreOpen = null; // { id, at }
+let moreCloseTimer = 0;
+
+function showMoreList(link) {
+  if (moreOpen?.id === link.id) return;
+  const anchor = iconEl(link.id);
+  if (!anchor) return;
+  moreOpen = { id: link.id, at: performance.now() };
+  moreListEl.setAttribute('aria-label', `${link.name}: more links`);
+  moreListEl.replaceChildren(
+    ...link.more.map((item) =>
+      el('a', { class: 'more-row', href: item.url, draggable: 'false' }, [
+        el('span', { class: 'name', text: item.name }),
+        el('span', { class: 'path', text: pathOf(item.url) }),
+      ])),
+  );
+  moreListEl.hidden = false;
+  // Below the icon's cell (its label stays visible), or above it near the bottom; inside the window.
+  const cell = anchor.getBoundingClientRect();
+  const box = moreListEl.getBoundingClientRect();
+  let top = cell.bottom - 2;
+  if (top + box.height > innerHeight - 8) top = Math.max(8, cell.top - box.height + 2);
+  const left = cell.left + cell.width / 2 - Math.min(box.width / 2, cell.width / 2 + 40);
+  moreListEl.style.left = `${Math.min(Math.max(8, left), innerWidth - box.width - 8)}px`;
+  moreListEl.style.top = `${top}px`;
+}
+
+function hideMoreList() {
+  clearTimeout(moreCloseTimer);
+  moreCloseTimer = 0;
+  if (!moreOpen) return;
+  moreOpen = null;
+  moreListEl.hidden = true;
+  moreListEl.replaceChildren();
+}
+
+gridEl.addEventListener('pointerover', (event) => {
+  const icon = event.target.closest('.icon');
+  if (!icon || press || drag || band || renaming || jump || document.querySelector('dialog[open]')) return;
+  const link = linkById(icon.dataset.id);
+  if (link?.more.length) {
+    clearTimeout(moreCloseTimer);
+    moreCloseTimer = 0;
+    showMoreList(link);
+  } else {
+    hideMoreList();
+  }
+});
+
+// Leaving both the tile and its list closes the list, after a moment to cross between them.
+document.addEventListener('pointerover', (event) => {
+  if (!moreOpen) return;
+  const inside = moreListEl.contains(event.target) || event.target.closest?.('.icon')?.dataset.id === moreOpen.id;
+  if (inside) {
+    clearTimeout(moreCloseTimer);
+    moreCloseTimer = 0;
+  } else if (!moreCloseTimer) {
+    moreCloseTimer = setTimeout(hideMoreList, MORE_CLOSE_MS);
+  }
+});
+document.documentElement.addEventListener('pointerleave', () => {
+  if (moreOpen && !moreCloseTimer) moreCloseTimer = setTimeout(hideMoreList, MORE_CLOSE_MS);
+});
+
+// Pressing a tile (to open or move it) puts the list away.
+gridEl.addEventListener('pointerdown', hideMoreList);
+desktop.addEventListener('scroll', hideMoreList);
+window.addEventListener('blur', hideMoreList);
+
+moreListEl.addEventListener('click', (event) => {
+  if (moreOpen && performance.now() - moreOpen.at < MORE_CLICK_GRACE_MS) event.preventDefault();
+});
+moreListEl.addEventListener('auxclick', (event) => {
+  if (moreOpen && performance.now() - moreOpen.at < MORE_CLICK_GRACE_MS) event.preventDefault();
+});
+
+
+// ---- jump mode -----------------------------------------------------------------
+
+// Letters on every icon (Alt+J from anywhere, or the taskbar button); typing an icon's
+// letters opens it. An icon with extra links shows them as a list with letters of its
+// own, the icon's own link first. Shift on the last letter opens in a new tab.
+let jump = null; // { typed, codes: Map<code, id>, list: { link, entries } | null, back, port }
+
+// port: the Alt+J toolbar panel that passes keys on (when the address bar has focus).
+function startJump({ back = false, port = null } = {}) {
+  if (jump || drag || renaming || document.querySelector('dialog[open]')) return;
+  hideMoreList();
+  if (!state.layout.links.length) {
+    if (back) closeThisTab();
+    return;
+  }
+  hideToast();
+  const order = readingOrder();
+  const codes = hintCodes(order.length);
+  jump = { typed: '', codes: new Map(order.map((id, index) => [codes[index], id])), list: null, back, port };
+  desktop.classList.add('jumping');
+  desktop.focus({ preventScroll: true });
+  drawJump();
+  announce('Jump: type the letters shown on a link. Esc cancels.');
+}
+
+function drawJump() {
+  jump.port?.postMessage({ typed: jump.typed });
+  const { w, tile: size, padTop } = metrics();
+  const nodes = [];
+  for (const [code, id] of jump.codes) {
+    const cell = state.display.get(id);
+    if (!cell) continue;
+    const match = !jump.list && code.startsWith(jump.typed);
+    iconEl(id)?.classList.toggle('jump-miss', !match);
+    if (!match) continue;
+    const { left, top } = cellPos(cell);
+    const hint = el('span', { class: 'jump-hint', dataset: { id } }, [el('span', { class: 'typed', text: jump.typed }), code.slice(jump.typed.length)]);
+    hint.style.left = `${left + (w - size) / 2 - 6}px`;
+    hint.style.top = `${top + padTop - 6}px`;
+    nodes.push(hint);
+  }
+  jumpEl.replaceChildren(...nodes);
+}
+
+function pathOf(url) {
+  try {
+    const { host, pathname } = new URL(url);
+    return pathname === '/' ? host : pathname;
+  } catch {
+    return url;
+  }
+}
+
+function showJumpList(link) {
+  const items = [{ url: link.url, name: link.name, main: true }, ...link.more];
+  const codes = hintCodes(items.length);
+  jump.list = { link, entries: items.map((item, index) => ({ ...item, code: codes[index] })) };
+  jump.typed = '';
+  drawJump();
+  jumpListEl.replaceChildren(
+    ...jump.list.entries.map((entry) => {
+      const row = el('div', { class: `jump-row${entry.main ? ' main' : ''}`, role: 'option' }, [
+        el('span', { class: 'jump-hint', text: entry.code }),
+        el('span', { class: 'name', text: entry.name }),
+        el('span', { class: 'path', text: pathOf(entry.url) }),
+      ]);
+      row.addEventListener('click', (event) => finishJump(entry.url, event.shiftKey || event.ctrlKey));
+      return row;
+    }),
+  );
+  jumpListEl.setAttribute('aria-label', `${link.name} links`);
+  jumpListEl.hidden = false;
+  // Below the icon, kept inside the window.
+  const anchor = iconEl(link.id)?.querySelector('.tile')?.getBoundingClientRect();
+  const box = jumpListEl.getBoundingClientRect();
+  if (anchor) {
+    let top = anchor.bottom + 8;
+    if (top + box.height > innerHeight - 8) top = Math.max(8, anchor.top - 8 - box.height);
+    jumpListEl.style.left = `${Math.min(Math.max(8, anchor.left - 6), innerWidth - box.width - 8)}px`;
+    jumpListEl.style.top = `${top}px`;
+  }
+  announce(`${link.name}: ${items.length} links. Type a link's letters.`);
+}
+
+function endJump() {
+  if (!jump) return;
+  jump.port?.postMessage({ done: true });
+  jump = null;
+  desktop.classList.remove('jumping');
+  for (const node of gridEl.children) node.classList.remove('jump-miss');
+  jumpEl.replaceChildren();
+  jumpListEl.hidden = true;
+  jumpListEl.replaceChildren();
+}
+
+function finishJump(url, newTab) {
+  endJump();
+  openUrl(url, newTab);
+}
+
+function closeThisTab() {
+  browser.tabs.getCurrent().then((tab) => tab && browser.tabs.remove(tab.id));
+}
+
+function jumpKey(event) {
+  if (event.ctrlKey || event.metaKey || event.altKey || ['Shift', 'CapsLock'].includes(event.key)) return;
+  event.preventDefault();
+  event.stopPropagation();
+  if (event.key === 'Escape') {
+    if (jump.list) {
+      jump.list = null;
+      jump.typed = '';
+      jumpListEl.hidden = true;
+      drawJump();
+    } else {
+      const { back } = jump;
+      endJump();
+      // Opened from another page by the shortcut: Esc goes back there.
+      if (back) closeThisTab();
+    }
+    return;
+  }
+  if (event.key === 'Backspace') {
+    jump.typed = jump.typed.slice(0, -1);
+    if (!jump.list) drawJump();
+    return;
+  }
+  if (!/^[a-z]$/i.test(event.key)) return;
+  const typed = jump.typed + event.key.toLowerCase();
+  if (jump.list) {
+    const entries = jump.list.entries.filter((entry) => entry.code.startsWith(typed));
+    if (!entries.length) return;
+    jump.typed = typed;
+    jump.port?.postMessage({ typed });
+    if (entries.length === 1 && entries[0].code === typed) finishJump(entries[0].url, event.shiftKey);
+    return;
+  }
+  const matches = [...jump.codes.keys()].filter((code) => code.startsWith(typed));
+  if (!matches.length) return; // a key on no icon is ignored
+  jump.typed = typed;
+  if (matches.length > 1 || matches[0] !== typed) {
+    drawJump();
+    return;
+  }
+  const link = linkById(jump.codes.get(typed));
+  if (!link) endJump();
+  else if (link.more.length) showJumpList(link);
+  else finishJump(link.url, event.shiftKey);
+}
+
+// A click anywhere but the list ends jump mode.
+document.addEventListener('pointerdown', (event) => {
+  if (jump && !jumpListEl.contains(event.target)) endJump();
+}, true);
+
+// The Alt+J toolbar panel (popup/jump.js) for this tab: its keys drive jump mode here,
+// and closing it (Esc, or a click elsewhere) ends jump mode.
+browser.runtime.onConnect.addListener((port) => {
+  if (port.name !== `jump:${state.tabId}`) return;
+  endJump();
+  startJump({ port });
+  if (jump?.port !== port) {
+    port.postMessage({ done: true }); // nothing to jump to
+    return;
+  }
+  port.onMessage.addListener((key) => {
+    if (jump?.port === port) jumpKey({ ...key, preventDefault() {}, stopPropagation() {} });
+  });
+  port.onDisconnect.addListener(() => {
+    if (jump?.port === port) {
+      jump.port = null;
+      endJump();
+    }
+  });
+});
+
 // ---- empty desktop card ------------------------------------------------------
 
 $('empty').addEventListener('click', (event) => {
@@ -945,6 +1290,13 @@ bindSiteAccess($('empty-site-access'));
 // ---- taskbar -----------------------------------------------------------------
 
 $('settings-button').addEventListener('click', () => openSettings());
+$('jump-button').addEventListener('click', () => startJump());
+// The button shows the shortcut as set (it can be changed in Firefox, or unset).
+browser.commands.getAll().then((commands) => {
+  const key = commands.find((command) => command.name === 'jump')?.shortcut ?? '';
+  $('jump-shortcut').textContent = key;
+  $('jump-button').title = `Jump to a link: type the letters shown on it${key ? `. ${key} works anywhere in Firefox` : ''}.`;
+}, () => {});
 
 const timeFormat = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' });
 const dateFormat = new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short' });
@@ -1010,6 +1362,11 @@ async function init() {
   tick();
   reportColsSoon();
   if (navigator.onLine) send('retryIcons').catch(() => {});
+  if (location.hash.startsWith('#jump')) {
+    const back = location.hash === '#jump-back';
+    history.replaceState(null, '', location.pathname);
+    startJump({ back });
+  }
 }
 
 init();
