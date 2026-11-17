@@ -13,6 +13,7 @@ const desktop = $('desktop');
 const gridEl = $('grid');
 const dotsEl = $('dots');
 const dropEl = $('drop-target');
+const targetsEl = $('targets');
 const bandEl = $('band');
 
 // The single source for icon sizes; CSS reads them as variables.
@@ -312,13 +313,18 @@ async function resync() {
 
 // ---- actions ---------------------------------------------------------------
 
-function commitMove(id, target, message = `Moved “${linkById(id)?.name}”`) {
-  const from = state.display.get(id);
-  if (!from || (from.col === target.col && from.row === target.row)) return false;
-  const previous = saveCells(grid.moveTo(state.display, id, target));
+// Saves a new arrangement as one undoable step.
+function commitCells(next, message) {
+  const previous = saveCells(next);
   if (!previous) return false;
   pushUndo({ kind: 'cells', cells: previous }, message);
   return true;
+}
+
+function commitMove(id, target, message = `Moved “${linkById(id)?.name}”`) {
+  const from = state.display.get(id);
+  if (!from || (from.col === target.col && from.row === target.row)) return false;
+  return commitCells(grid.moveTo(state.display, id, target), message);
 }
 
 function packGrid() {
@@ -454,7 +460,8 @@ function startRename(id) {
 
 // ---- moving with the pointer -----------------------------------------------
 
-function showDots(origin) {
+// Free-cell dots, plus a dashed outline where each moving icon came from.
+function showDots(ids) {
   const { w, h, tile: size } = metrics();
   const rows = Math.max(Math.ceil((gridEl.offsetHeight - PAD) / h), Math.ceil((desktop.clientHeight - PAD) / h));
   const taken = grid.occupiedSet(state.display);
@@ -468,12 +475,42 @@ function showDots(origin) {
       nodes.push(dot);
     }
   }
-  const outline = el('span', { class: 'ghost-origin' });
-  const pos = cellPos(origin);
-  outline.style.left = `${pos.left + (w - size) / 2}px`;
-  outline.style.top = `${pos.top + 8}px`;
-  nodes.push(outline);
+  for (const id of ids) {
+    const outline = el('span', { class: 'ghost-origin' });
+    const pos = cellPos(state.display.get(id));
+    outline.style.left = `${pos.left + (w - size) / 2}px`;
+    outline.style.top = `${pos.top + 8}px`;
+    nodes.push(outline);
+  }
   dotsEl.replaceChildren(...nodes);
+}
+
+// Outlines the cell each moving icon would land in; a cell whose icon gets moved out of
+// the way shows the swap arrow. Nothing is outlined when the drop would be refused.
+function showMoveTargets() {
+  const nodes = [];
+  if (drag.next) {
+    const moving = new Set(drag.ids);
+    for (const id of drag.ids) {
+      const cell = drag.next.get(id);
+      const other = grid.idAt(state.display, cell);
+      const { left, top } = cellPos(cell);
+      const node = el('span', { class: 'drop-target' });
+      node.classList.toggle('swap', Boolean(other && !moving.has(other)));
+      node.style.left = `${left}px`;
+      node.style.top = `${top}px`;
+      nodes.push(node);
+    }
+  }
+  targetsEl.replaceChildren(...nodes);
+}
+
+// Where the group would end up with the pointer's cell as the pressed icon's new cell.
+function updateMoveTarget() {
+  const cell = cellAt(drag.x, drag.y);
+  const offset = cell && { col: cell.col - drag.origin.col, row: cell.row - drag.origin.row };
+  drag.next = offset && grid.moveGroup(state.display, drag.ids, offset, state.cols);
+  showMoveTargets();
 }
 
 function showDropTarget(cell, movingId = null) {
@@ -491,21 +528,36 @@ function showDropTarget(cell, movingId = null) {
 }
 
 function startDrag(event) {
-  const node = iconEl(press.id);
-  if (!node) {
+  if (!iconEl(press.id)) {
     press = null;
     return;
   }
-  const ghost = node.querySelector('.tile').cloneNode(true);
-  ghost.classList.add('drag-ghost');
-  ghost.style.setProperty('--tile', `${metrics().tile}px`);
+  // Dragging a selected icon moves the whole selection; any other icon moves alone.
+  const ids =
+    state.selected.size > 1 && state.selected.has(press.id) ? readingOrder().filter((id) => state.selected.has(id)) : [press.id];
+  const origin = state.display.get(press.id);
+  const { w, h, tile: size } = metrics();
+  // Faded copies of the tiles, laid out as on the grid around the pressed one.
+  const ghost = el('div', { class: 'drag-ghost' });
+  ghost.style.setProperty('--tile', `${size}px`);
+  const nodes = [];
+  for (const id of ids) {
+    const node = iconEl(id);
+    if (!node) continue;
+    const cell = state.display.get(id);
+    const copy = node.querySelector('.tile').cloneNode(true);
+    copy.style.left = `${(cell.col - origin.col) * w - size / 2}px`;
+    copy.style.top = `${(cell.row - origin.row) * h - size / 2}px`;
+    ghost.append(copy);
+    node.classList.add('origin');
+    nodes.push(node);
+  }
   document.body.append(ghost);
-  node.classList.add('origin');
   // Capture, so releasing outside the window still ends (and cancels) the move.
   gridEl.setPointerCapture(event.pointerId);
-  drag = { id: press.id, ghost, node, origin: state.display.get(press.id), target: null, x: 0, y: 0, scroller: 0 };
+  drag = { id: press.id, ids, ghost, nodes, origin, next: null, x: 0, y: 0, scroller: 0 };
   press = null;
-  showDots(drag.origin);
+  showDots(ids);
   updateDrag(event);
 }
 
@@ -519,8 +571,7 @@ function autoScroll() {
   const before = desktop.scrollTop;
   if (delta) desktop.scrollTop += delta;
   if (desktop.scrollTop !== before) {
-    drag.target = cellAt(drag.x, drag.y);
-    showDropTarget(drag.target, drag.id);
+    updateMoveTarget();
     drag.scroller = requestAnimationFrame(autoScroll);
   } else {
     drag.scroller = 0; // at the edge already, or not near one: stop until the pointer moves
@@ -532,8 +583,7 @@ function updateDrag(event) {
   drag.y = event.clientY;
   drag.ghost.style.left = `${event.clientX}px`;
   drag.ghost.style.top = `${event.clientY}px`;
-  drag.target = cellAt(event.clientX, event.clientY);
-  showDropTarget(drag.target, drag.id);
+  updateMoveTarget();
   if (!drag.scroller) drag.scroller = requestAnimationFrame(autoScroll);
 }
 
@@ -547,14 +597,14 @@ function swallowNextClick() {
 }
 
 function endDrag(commit) {
-  const { id, ghost, node, target, scroller } = drag;
+  const { id, ids, ghost, nodes, next, scroller } = drag;
   cancelAnimationFrame(scroller);
   ghost.remove();
-  node.classList.remove('origin');
+  for (const node of nodes) node.classList.remove('origin');
   dotsEl.replaceChildren();
-  dropEl.hidden = true;
+  targetsEl.replaceChildren();
   drag = null;
-  if (commit && target) commitMove(id, target);
+  if (commit && next) commitCells(next, ids.length > 1 ? `Moved ${ids.length} links` : `Moved “${linkById(id)?.name}”`);
   // Storage updates that arrived during the move were held back; paint them now.
   if (renderQueued) render();
 }

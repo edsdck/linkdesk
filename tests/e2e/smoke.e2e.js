@@ -304,6 +304,51 @@ describe('Linkdesk in Firefox', () => {
     assert.ok(live);
   });
 
+  test('dragging a selected icon moves the whole selection; one undo puts it back', async () => {
+    await ff.eval(page, () => {
+      document.querySelector('.icon').focus();
+      return true;
+    });
+    await ff.keys(page, ['Space']);
+    await ff.keys(page, ['Shift', 'ArrowRight']);
+    const ids = await ff.eval(page, () => [...document.querySelectorAll('.icon[data-selected="true"]')].map((node) => node.dataset.id));
+    assert.equal(ids.length, 2);
+    const cellsOf = () =>
+      ff.eval(page, async (list) => {
+        const { layout } = await browser.storage.local.get('layout');
+        return list.map((id) => layout.links.find((link) => link.id === id).cell);
+      }, ids);
+    const before = await cellsOf();
+    // A visible offset whose landing cells are free, so nothing else has to move.
+    const offset = await ff.eval(page, async (cells) => {
+      const { layout } = await browser.storage.local.get('layout');
+      const taken = new Set(layout.links.map((link) => `${link.cell.col},${link.cell.row}`));
+      for (let row = 1; row <= 3; row += 1) {
+        for (let col = 0; col <= 3; col += 1) {
+          if (cells.every((cell) => !taken.has(`${cell.col + col},${cell.row + row}`))) return { col, row };
+        }
+      }
+      return null;
+    }, before);
+    assert.ok(offset, 'found free landing cells');
+    const from = await iconNamed(await ff.eval(page, (id) => document.querySelector(`.icon[data-id="${id}"] .label`).textContent, ids[0]));
+    const to = await cellCenter(before[0].col + offset.col, before[0].row + offset.row);
+    await ff.drag(page, from, to, 10);
+    await ff.waitFor(page, () => document.getElementById('toast-text').textContent === 'Moved 2 links');
+    const after = await cellsOf();
+    assert.deepEqual(after, before.map((cell) => ({ col: cell.col + offset.col, row: cell.row + offset.row })));
+    assert.equal(await ff.eval(page, () => document.querySelectorAll('.icon[data-selected="true"]').length), 2, 'selection kept');
+    await focusDesktop(); // also clears the selection
+    await ff.keys(page, ['Control', 'z']);
+    await ff.waitFor(page, async (list, cells) => {
+      const { layout } = await browser.storage.local.get('layout');
+      return list.every((id, i) => {
+        const cell = layout.links.find((link) => link.id === id).cell;
+        return cell.col === cells[i].col && cell.row === cells[i].row;
+      });
+    }, { args: [ids, before] });
+  });
+
   test('desktop shortcuts do not fire while the taskbar has focus', async () => {
     await ff.eval(page, () => {
       document.querySelector('.icon').focus();

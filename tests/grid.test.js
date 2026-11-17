@@ -85,3 +85,42 @@ test('idAt and cellsToObject', () => {
   assert.equal(grid.idAt(map, { col: 0, row: 0 }), null);
   assert.deepEqual(grid.cellsToObject(map), { a: { col: 1, row: 1 } });
 });
+
+test('moveGroup moves every icon by the same offset, keeping the shape', () => {
+  const start = cells({ a: { col: 0, row: 0 }, b: { col: 1, row: 1 }, c: { col: 4, row: 0 } });
+  const next = grid.moveGroup(start, ['a', 'b'], { col: 2, row: 1 }, 6);
+  assert.deepEqual(next.get('a'), { col: 2, row: 1 });
+  assert.deepEqual(next.get('b'), { col: 3, row: 2 });
+  assert.deepEqual(next.get('c'), { col: 4, row: 0 });
+  assert.deepEqual(start.get('a'), { col: 0, row: 0 }, 'input map untouched');
+});
+
+test('moveGroup can move onto cells its own members are leaving', () => {
+  const start = cells({ a: { col: 0, row: 0 }, b: { col: 1, row: 0 }, c: { col: 2, row: 0 } });
+  const next = grid.moveGroup(start, ['a', 'b', 'c'], { col: 1, row: 0 }, 5);
+  assert.deepEqual([...next.values()], [{ col: 1, row: 0 }, { col: 2, row: 0 }, { col: 3, row: 0 }]);
+});
+
+test('moveGroup puts icons in the way into the cells the group left, in reading order', () => {
+  const start = cells({ a: { col: 0, row: 0 }, b: { col: 0, row: 1 }, x: { col: 2, row: 0 }, y: { col: 2, row: 1 }, z: { col: 4, row: 4 } });
+  const next = grid.moveGroup(start, ['a', 'b'], { col: 2, row: 0 }, 5);
+  assert.deepEqual(next.get('a'), { col: 2, row: 0 });
+  assert.deepEqual(next.get('b'), { col: 2, row: 1 });
+  assert.deepEqual(next.get('x'), { col: 0, row: 0 });
+  assert.deepEqual(next.get('y'), { col: 0, row: 1 });
+  assert.deepEqual(next.get('z'), { col: 4, row: 4 });
+  assert.equal(new Set([...next.values()].map(grid.cellKey)).size, next.size, 'no two icons share a cell');
+});
+
+test('moveGroup with one icon matches moveTo', () => {
+  const start = cells({ a: { col: 0, row: 0 }, b: { col: 2, row: 1 } });
+  assert.deepEqual(grid.moveGroup(start, ['a'], { col: 2, row: 1 }, 4), grid.moveTo(start, 'a', { col: 2, row: 1 }));
+  assert.deepEqual(grid.moveGroup(start, ['a'], { col: 1, row: 3 }, 4), grid.moveTo(start, 'a', { col: 1, row: 3 }));
+});
+
+test('moveGroup refuses a move that would push an icon off the grid', () => {
+  const start = cells({ a: { col: 0, row: 0 }, b: { col: 3, row: 1 } });
+  assert.equal(grid.moveGroup(start, ['a', 'b'], { col: 1, row: 0 }, 4), null);
+  assert.equal(grid.moveGroup(start, ['a', 'b'], { col: 0, row: -1 }, 4), null);
+  assert.ok(grid.moveGroup(start, ['a', 'b'], { col: 0, row: 5 }, 4), 'rows grow downward');
+});

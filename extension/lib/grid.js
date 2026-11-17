@@ -73,6 +73,31 @@ export function moveTo(cells, id, target) {
   return next;
 }
 
+const byCell = (a, b) => a.row - b.row || a.col - b.col;
+
+// Moves every id in `ids` by the same offset ({ col, row }), keeping the group's shape.
+// Icons in the way take the cells the group left, in reading order, so a one-icon group
+// is a plain move or swap (as moveTo). Returns null when any icon would leave the grid.
+export function moveGroup(cells, ids, offset, cols) {
+  const group = new Set(ids.filter((id) => cells.has(id)));
+  const dest = new Map();
+  for (const id of group) {
+    const from = cells.get(id);
+    const to = { col: from.col + offset.col, row: from.row + offset.row };
+    if (to.col < 0 || to.col >= cols || to.row < 0) return null;
+    dest.set(id, to);
+  }
+  const taken = new Set([...dest.values()].map(cellKey));
+  // Never fewer free cells than icons in the way: each one sits on a cell some member is
+  // moving to, and that member's own cell is left behind unless it too is moved onto.
+  const vacated = [...group].map((id) => cells.get(id)).filter((cell) => !taken.has(cellKey(cell))).sort(byCell);
+  const inWay = [...cells].filter(([id, cell]) => !group.has(id) && taken.has(cellKey(cell))).sort(([, a], [, b]) => byCell(a, b));
+  const next = new Map(cells);
+  inWay.forEach(([id], index) => next.set(id, { ...vacated[index] }));
+  for (const [id, to] of dest) next.set(id, to);
+  return next;
+}
+
 // Removes gaps, keeping reading order.
 export function pack(cells, cols) {
   const order = [...cells].sort(([, a], [, b]) => a.row - b.row || a.col - b.col);

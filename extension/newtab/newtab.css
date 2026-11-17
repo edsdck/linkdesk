@@ -69,8 +69,8 @@ body {
   min-height: 0;
 }
 
-#dots, #drop-target, #band { position: absolute; pointer-events: none; }
-#dots { inset: 0; }
+#dots, #targets, .drop-target, #band { position: absolute; pointer-events: none; }
+#dots, #targets { inset: 0; }
 .dot {
   position: absolute;
   width: 4px; height: 4px; margin: -2px 0 0 -2px;
@@ -84,13 +84,13 @@ body {
   border: 1.5px dashed var(--text-secondary);
   border-radius: 10px;
 }
-#drop-target {
+.drop-target {
   width: var(--cell-w); height: var(--cell-h);
   border: 2px solid var(--accent);
   border-radius: var(--radius-medium);
   background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
-#drop-target.swap::after {
+.drop-target.swap::after {
   content: "⇄";
   position: absolute; top: 2px; right: 6px;
   color: var(--accent); font-weight: 700;
@@ -100,13 +100,14 @@ body {
   background: color-mix(in srgb, var(--accent) 15%, transparent);
 }
 
+/* A zero-size point at the pointer; the tile copies are placed around it (newtab.js). */
 .drag-ghost {
   position: fixed;
   z-index: 10;
   pointer-events: none;
   opacity: 0.6;
-  transform: translate(-50%, -50%);
 }
+.drag-ghost .tile { position: absolute; }
 
 #empty {
   position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
@@ -168,12 +169,12 @@ body:has(#desktop[data-wallpaper="midnight"]) #taskbar {
 .editor-buttons .spacer { flex: 1; }
 
 /* Drag feedback on wallpapers: white with a dark ring, like focus and selection. */
-#desktop:not([data-wallpaper="plain"]) #drop-target {
+#desktop:not([data-wallpaper="plain"]) .drop-target {
   border-color: #fff;
   box-shadow: 0 0 0 2px rgb(0 0 0 / 0.55);
   background: rgb(255 255 255 / 0.2);
 }
-#desktop:not([data-wallpaper="plain"]) #drop-target.swap::after { color: #fff; text-shadow: 0 0 2px #000; }
+#desktop:not([data-wallpaper="plain"]) .drop-target.swap::after { color: #fff; text-shadow: 0 0 2px #000; }
 #desktop:not([data-wallpaper="plain"]) #band { border-color: #fff; box-shadow: 0 0 0 1px rgb(0 0 0 / 0.55); }
 #desktop:not([data-wallpaper="plain"]) .dot { background: #fff; box-shadow: 0 0 0 1px rgb(0 0 0 / 0.5); opacity: 0.9; }
 #desktop:not([data-wallpaper="plain"]) .ghost-origin { border-color: #fff; box-shadow: 0 0 0 1px rgb(0 0 0 / 0.5); }
@@ -182,7 +183,7 @@ body:has(#desktop[data-wallpaper="midnight"]) #taskbar {
   /* A border, so it stays distinct from the focus outline. */
   .icon { border: 2px solid transparent; }
   .icon[data-selected="true"] { border-color: Highlight; }
-  #drop-target, #band { border-color: Highlight; }
+  .drop-target, #band { border-color: Highlight; }
   .dot { forced-color-adjust: none; background: CanvasText; }
 }
 

@@ -26,7 +26,6 @@ Status: spec only, not implemented. v0.2 applies two independent reviews (UX and
 Cut from v1 after review (candidates for later):
 
 - Double-click-to-open mode. v1 is single click only.
-- Dragging a selected group of icons.
 - Taskbar search (the address bar already does this) and the start menu.
 - "Image URL" icon source (upload and paste cover it).
 - Third-party favicon services (Google, DuckDuckGo).
@@ -132,6 +131,7 @@ Links can be placed in any cell, not just packed at the top-left. Gaps are allow
 - Drop on an **empty cell**: the icon moves there.
 - Drop on an **occupied cell**: the two icons swap places.
 - Drop on the taskbar, outside the window, or press **Esc**: the move is cancelled and the icon returns.
+- Dragging a **selected** icon while several are selected moves the whole selection (section 5.4). The icons keep their arrangement relative to each other: each moves by the same number of rows and columns as the dragged icon. Each landing cell is outlined, and icons in the way move into the cells the group left, in reading order (for one icon, this is the swap above). A drop that would put any icon outside the grid is refused, like a drop outside the window. Dragging an icon that isn't selected moves only that icon.
 
 Sketch 2: dragging "Repo" to a new cell
 
@@ -181,7 +181,7 @@ Sketch 3: drop rules
 
 ### 5.4 Selection
 
-Selection exists only to delete several icons at once.
+Selection exists to delete or move several icons at once.
 
 - Drag a rectangle on empty desktop space to select icons. Space toggles selection on the focused icon; Shift+Arrow extends it.
 - Selected icons get a highlight (outline plus tint, not colour alone).
