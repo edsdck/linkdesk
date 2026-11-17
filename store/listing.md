@@ -80,6 +80,21 @@ Not required: Linkdesk collects no data. Leave empty, or paste the Privacy parag
 | `6-more-links.png` | Several links behind one icon: point at it to see them |
 | `7-jump.png` | Jump with the keyboard: press Alt+J, type a link's letter |
 
+## Release notes (one section per version, newest first)
+
+Paste the current version's notes into the **Release notes** field of each upload.
+
+### 0.2.0
+
+- **Several links behind one icon.** Point at an icon to see its extra links, say your repositories behind one GitHub icon. Add them in the editor ("More"), or hold Alt while dropping one icon onto another.
+- **Jump with the keyboard.** Press Alt+J from any tab: every icon shows a letter, and typing it opens the link. Icons with extra links list them with letters of their own. The Jump button in the taskbar does the same. You can change the shortcut in Firefox's add-on shortcut settings.
+- **Move several icons at once.** Select icons, then drag one of them: the whole selection moves together.
+- **Icons keep their place when the window is resized.** A narrower window now shrinks the desktop instead of moving icons to other cells.
+
+### 0.1.0
+
+- First release.
+
 ## Notes to reviewer
 
 Linkdesk overrides the new tab page (chrome_url_overrides.newtab); the page is bundled in the add-on.

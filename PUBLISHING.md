@@ -23,14 +23,14 @@ A checklist to pick up where we left off. Everything the form asks for is in [st
 4. "Do you need to submit source code?" → **No**. Nothing is minified, transpiled or generated; the zip is the source.
 5. Fill in the listing from [store/listing.md](store/listing.md): name, summary, description, categories, tags, support, licence (MIT), privacy policy (leave empty).
 6. Upload the seven screenshots from `store/screenshots/` with their captions (`npm run screenshots` regenerates them).
-7. Paste **Notes to reviewer** from store/listing.md.
+7. Paste **Notes to reviewer** from store/listing.md, and the current version's **Release notes** from the same file.
 8. Submit. Listed add-ons are signed straight away and reviewed by Mozilla, which can take from minutes to a few weeks.
 
 ## After submitting
 
 - If a reviewer asks about `data_collection_permissions: "none"` (see [COMPLIANCE.md](COMPLIANCE.md), open item 2), the fallback is
   declaring `websiteContent` as an optional data permission. That change needs a new version.
-- To ship an update: bump the version in both files, `npm run check`, then upload the new zip under **Manage My Submissions → New Version**.
+- To ship an update: bump the version in both files, add that version's section under **Release notes** in store/listing.md, `npm run check`, then upload the new zip under **Manage My Submissions → New Version** and paste the notes.
 
 ## Still not verified in a real browser
 
