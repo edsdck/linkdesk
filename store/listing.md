@@ -24,10 +24,13 @@ What you can do:
 
 - Pin a site from the toolbar button in one click, or right-click any page or link and choose "Add page to Linkdesk".
 - Paste a link (Ctrl+V) or drop one from a web page onto the desktop.
-- Drag icons to any spot on the grid. Drop one on another to swap them, or tidy everything with "Pack to top-left".
+- Drag icons to any spot on the grid. Drop one on another to swap them, or tidy everything with "Pack to top-left". Select several and drag them together.
+- Keep several links behind one icon: point at it to see them (say, your repositories behind one GitHub icon). Add them in the editor, or hold Alt while dropping one icon onto another.
+- Jump to any link from the keyboard: press Alt+J from any tab, every icon shows a letter, type it to open the link.
+- The desktop shrinks to fit a smaller window, so your icons never move around.
 - Use the site's own icon, upload an image, or pick a letter tile and colour.
 - Rename, edit and delete with Firefox's own right-click menus. Every change can be undone (Ctrl+Z).
-- Keyboard friendly: arrow keys to move between icons, Ctrl+Arrow to move one, F2 to rename, Delete to remove.
+- Keyboard friendly: Alt+J to jump, arrow keys to move between icons, Ctrl+Arrow to move one, F2 to rename, Delete to remove.
 - Choose from six wallpapers or use your own image. Light and dark follow Firefox.
 - Import your most visited sites or bookmarks, and export everything to a file.
 
@@ -74,6 +77,8 @@ Not required: Linkdesk collects no data. Leave empty, or paste the Privacy parag
 | `3-editor.png` | Pick the site's icon, your own image, or a letter tile |
 | `4-midnight.png` | Six wallpapers, or your own image |
 | `5-settings.png` | Settings: icon size, wallpaper, site icons, import and export |
+| `6-more-links.png` | Several links behind one icon: point at it to see them |
+| `7-jump.png` | Jump with the keyboard: press Alt+J, type a link's letter |
 
 ## Notes to reviewer
 
@@ -88,8 +93,12 @@ Permissions:
 - Optional <all_urls>: only after the user ticks "Fetch site icons and titles", to fetch the title and icon of sites the user added. Icon URLs pointing at private-network hosts are refused, and icon requests don't follow redirects.
 - Optional bookmarks / topSites: only for the import buttons, requested on click.
 
+Keyboard shortcut (commands): "jump", Alt+J by default. On another page it opens the desktop in a new tab. On the
+desktop itself, where the address bar keeps focus, it opens a small toolbar popup (popup/jump.html) that only
+passes the typed keys to the desktop page over runtime.connect; it reads nothing else.
+
 data_collection_permissions is "none": nothing is sent to the developer or any third party. The only network
 requests go to the sites the user added (or the page they are on), to read that site's title and icon.
 
 To test: install, open a new tab (keep the change), click "Add a link", add any site. Toolbar button →
-"Add to desktop" adds the current page. Right-click the desktop or an icon for the menus. Settings: gear in the taskbar.
+"Add to desktop" adds the current page. Right-click the desktop or an icon for the menus. Settings: gear in the taskbar. Press Alt+J (or the Jump button in the taskbar) and type a letter shown on an icon.

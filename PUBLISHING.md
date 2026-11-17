@@ -22,7 +22,7 @@ A checklist to pick up where we left off. Everything the form asks for is in [st
 3. Upload `dist/linkdesk-<version>.zip`. The automatic validation should pass with no errors (it is the same check as `npm run lint`).
 4. "Do you need to submit source code?" → **No**. Nothing is minified, transpiled or generated; the zip is the source.
 5. Fill in the listing from [store/listing.md](store/listing.md): name, summary, description, categories, tags, support, licence (MIT), privacy policy (leave empty).
-6. Upload the five screenshots from `store/screenshots/` with their captions.
+6. Upload the seven screenshots from `store/screenshots/` with their captions (`npm run screenshots` regenerates them).
 7. Paste **Notes to reviewer** from store/listing.md.
 8. Submit. Listed add-ons are signed straight away and reviewed by Mozilla, which can take from minutes to a few weeks.
 

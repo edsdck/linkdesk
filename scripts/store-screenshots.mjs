@@ -10,6 +10,13 @@ const OUT = resolve('store/screenshots');
 const WIDTH = 1280;
 const HEIGHT = 800;
 
+// Extra links behind the "Docs" tile (shown on hover, and in jump mode).
+const DOCS_MORE = [
+  { url: 'https://docs.example.com/handbook', name: 'Team handbook' },
+  { url: 'https://docs.example.com/roadmap', name: 'Roadmap' },
+  { url: 'https://docs.example.com/meetings', name: 'Meeting notes' },
+];
+
 const LINKS = [
   ['Mail', 'M', '#0061e0', 0, 0], ['Calendar', 'C', '#008787', 1, 0], ['News', 'N', '#d7264c', 2, 0],
   ['Docs', 'D', '#058b00', 3, 0], ['Photos', 'P', '#c45a27', 4, 0], ['Music', '♪', '#8000d7', 0, 1],
@@ -51,7 +58,7 @@ try {
   const size = await sizeContent(page);
   if (size[0] !== WIDTH || size[1] !== HEIGHT) console.warn(`content is ${size.join('×')}, not ${WIDTH}×${HEIGHT}`);
 
-  await ff.eval(page, (links) => browser.runtime.sendMessage({
+  await ff.eval(page, (links, docsMore) => browser.runtime.sendMessage({
     type: 'addLinks',
     items: links.map(([name, text, color, col, row]) => ({
       url: `https://${name.toLowerCase()}.example.com/`,
@@ -59,8 +66,9 @@ try {
       nameEdited: true,
       icon: { kind: 'letter', text, color },
       cell: { col, row },
+      ...(name === 'Docs' ? { more: docsMore } : {}),
     })),
-  }), LINKS);
+  }), LINKS, DOCS_MORE);
   await ff.waitFor(page, (n) => document.querySelectorAll('.icon').length === n, { args: [LINKS.length] });
   await hideToast(page);
   await shot(page, '1-desktop');
@@ -111,6 +119,28 @@ try {
   await ff.waitFor(page, () => document.getElementById('desktop').dataset.wallpaper === 'midnight');
   await hideToast(page);
   await shot(page, '4-midnight');
+
+  // Pointing at the stacked "Docs" tile shows its extra links.
+  const docs = await ff.eval(page, () => {
+    const r = [...document.querySelectorAll('.icon')].find((n) => n.textContent.includes('Docs')).querySelector('.tile').getBoundingClientRect();
+    return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };
+  });
+  await ff.pointer(page, [{ type: 'pointerMove', x: docs.x, y: docs.y }]);
+  await ff.waitFor(page, () => !document.getElementById('more-list').hidden);
+  await shot(page, '6-more-links');
+  await ff.pointer(page, [{ type: 'pointerMove', x: 700, y: 600 }]);
+  await ff.waitFor(page, () => document.getElementById('more-list').hidden);
+
+  // Jump mode, started from the taskbar button (Alt+J does the same from anywhere).
+  const jump = await ff.eval(page, () => {
+    const r = document.getElementById('jump-button').getBoundingClientRect();
+    return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };
+  });
+  await ff.click(page, jump.x, jump.y);
+  await ff.waitFor(page, () => document.querySelectorAll('#jump .jump-hint').length > 0);
+  await ff.pointer(page, [{ type: 'pointerMove', x: 700, y: 600 }]);
+  await shot(page, '7-jump');
+  await ff.keys(page, ['Escape']);
 
   const options = await ff.openTab(`${BASE}options/options.html`);
   await sizeContent(options);
