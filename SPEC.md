@@ -99,9 +99,8 @@ Sketch 1: the desktop (whole new tab)
 ### 5.1 Grid and icons
 
 - Each icon is a real link (`<a href>`) with a 48 px image and a label (max two lines, ellipsis after). Hovering shows a tooltip with the full name; Firefox shows the URL in its status bar.
-- Icons sit on a grid. Column count comes from the window width and icon size; rows extend downward and the desktop scrolls vertically if they don't fit.
-- Positions are stored as grid cells (`col`, `row`), so they survive window resizing.
-- If the window is too narrow for a stored column, the icon is shown in the next free cell for display only; its saved cell is kept. If the user moves anything while icons are displaced, the displayed positions are saved.
+- Icons sit on a grid. Rows extend downward and the desktop scrolls vertically if they don't fit.
+- Positions are stored as grid cells (`col`, `row`). Resizing the window never moves an icon to another cell: every column that holds an icon stays on screen. If those columns don't fit at full size, the whole desktop (cells, tiles, labels, spacing) shrinks as far as needed; a window wider than they need adds empty columns at full size.
 - New icons go to the first free cell, left to right, top to bottom, or to the drop cell when dragged in.
 
 ### 5.2 Opening a link

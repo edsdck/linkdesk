@@ -124,3 +124,22 @@ test('moveGroup refuses a move that would push an icon off the grid', () => {
   assert.equal(grid.moveGroup(start, ['a', 'b'], { col: 0, row: -1 }, 4), null);
   assert.ok(grid.moveGroup(start, ['a', 'b'], { col: 0, row: 5 }, 4), 'rows grow downward');
 });
+
+test('fitGrid keeps full size and adds spare columns when the used ones fit', () => {
+  assert.deepEqual(grid.fitGrid(1000, 100, 24, 5), { cols: 9, scale: 1 });
+  assert.deepEqual(grid.fitGrid(1000, 100, 24, 9), { cols: 9, scale: 1 });
+});
+
+test('fitGrid shrinks cells so every used column stays on screen', () => {
+  const { cols, scale } = grid.fitGrid(1048, 100, 24, 15);
+  assert.equal(cols, 15);
+  assert.equal(scale, 1000 / 1500);
+  assert.ok(24 * 2 + cols * 100 * scale <= 1048);
+});
+
+test('fitGrid keeps shrinking however narrow the window gets', () => {
+  const { cols, scale } = grid.fitGrid(400, 100, 24, 15);
+  assert.equal(cols, 15);
+  assert.equal(scale, 352 / 1500);
+  assert.ok(grid.fitGrid(10, 100, 24, 15).scale > 0, 'never zero or negative');
+});

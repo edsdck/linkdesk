@@ -36,8 +36,12 @@ const cellCenter = (col, row) =>
   ff.eval(page, (c, r) => {
     const desktop = document.getElementById('desktop');
     const rect = desktop.getBoundingClientRect();
-    const size = { s: [88, 96], m: [100, 108], l: [120, 128] }[desktop.dataset.size];
-    return { x: rect.left + 24 + c * size[0] + size[0] / 2, y: rect.top + 24 + r * size[1] + 40 - desktop.scrollTop };
+    // Cell size as drawn (newtab.js shrinks it when the window is too narrow).
+    const size = ['--cell-w', '--cell-h'].map((name) => parseFloat(desktop.style.getPropertyValue(name)));
+    return {
+      x: rect.left + 24 + c * size[0] + size[0] / 2,
+      y: rect.top + 24 + r * size[1] + 40 * (size[1] / { s: 96, m: 108, l: 128 }[desktop.dataset.size]) - desktop.scrollTop,
+    };
   }, col, row);
 const toastText = () =>
   ff.eval(page, () => (document.getElementById('toast').hidden ? null : document.getElementById('toast-text').textContent));
@@ -358,6 +362,47 @@ describe('Linkdesk in Firefox', () => {
     await ff.eval(page, () => {
       document.getElementById('settings-button').focus();
       return true;
+  test('a narrower window shrinks the desktop instead of moving icons', async () => {
+    const link = (await storedLayout()).links[0];
+    await send('setCells', { cells: { [link.id]: { col: 9, row: 0 } } });
+    const at = () =>
+      ff.eval(page, (id) => {
+        const desktop = document.getElementById('desktop');
+        const node = document.querySelector(`.icon[data-id="${id}"]`);
+        const r = node.getBoundingClientRect();
+        const d = desktop.getBoundingClientRect();
+        return { col: Math.round((node.offsetLeft - 24) / parseFloat(desktop.style.getPropertyValue('--cell-w'))), right: r.right, desktopRight: d.right, scale: Number(desktop.style.getPropertyValue('--scale')) };
+      }, link.id);
+    const chrome = await ff.chromeWindow();
+    const original = await ff.eval(chrome, () => [window.outerWidth, window.outerHeight]);
+    try {
+      await ff.waitFor(page, async (id) => {
+        const { layout } = await browser.storage.local.get('layout');
+        return layout.links.find((item) => item.id === id).cell.col === 9;
+      }, { args: [link.id] });
+      for (const width of [900, 700]) {
+        // Extension pages can't take a BiDi viewport, so resize the browser window.
+        await ff.eval(chrome, (w) => {
+          window.resizeTo(w + (window.outerWidth - gBrowser.selectedBrowser.clientWidth), 760);
+          return true;
+        }, width);
+        await ff.waitFor(page, (w) => Math.abs(window.innerWidth - w) <= 2, { args: [width] });
+        await sleep(150);
+        const now = await at();
+        assert.equal(now.col, 9, `still in column 10 at ${width}px`);
+        assert.ok(now.scale < 1, `shrunk at ${width}px`);
+        assert.ok(now.right <= now.desktopRight, `fully visible at ${width}px`);
+      }
+      assert.deepEqual((await storedLayout()).links.find((item) => item.id === link.id).cell, { col: 9, row: 0 }, 'saved cell unchanged');
+    } finally {
+      await ff.eval(chrome, ([w, h]) => {
+        window.resizeTo(w, h);
+        return true;
+      }, original);
+      await send('setCells', { cells: { [link.id]: link.cell } });
+    }
+  });
+
     });
     await ff.keys(page, ['Delete']);
     await sleep(200);

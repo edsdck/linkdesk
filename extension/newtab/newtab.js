@@ -27,6 +27,7 @@ const DRAG_THRESHOLD = 4;
 const TOAST_MS = 6000;
 const SCROLL_EDGE = 40;
 const DIRECTIONS = { ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down' };
+const ICON_PAD_TOP = 8; // .icon padding-top at full size, scaled in CSS by --scale
 
 const state = {
   stored: migrate(null), // layout as last read from storage
@@ -39,6 +40,7 @@ const state = {
   selected: new Set(),
   focusId: null,
   tabId: null,
+  scale: 1, // < 1 while the window is too narrow for the used columns at full size
   menuTarget: null,
   menuCell: null,
 };
@@ -59,7 +61,12 @@ const undoStack = [];
 
 // ---- geometry --------------------------------------------------------------
 
-const metrics = () => SIZES[state.settings.iconSize];
+// Cell and tile sizes as drawn, after scaling to the window.
+function metrics() {
+  const base = SIZES[state.settings.iconSize];
+  const s = state.scale;
+  return { tile: base.tile * s, w: base.w * s, h: base.h * s, padTop: ICON_PAD_TOP * s };
+}
 const linkById = (id) => state.layout.links.find((link) => link.id === id) ?? null;
 const iconEl = (id) => (id ? gridEl.querySelector(`.icon[data-id="${CSS.escape(id)}"]`) : null);
 
@@ -184,10 +191,15 @@ function render() {
   desktop.style.setProperty('--cell-w', `${size.w}px`);
   desktop.style.setProperty('--cell-h', `${size.h}px`);
   applyWallpaper(desktop, state.settings, state.wallpaperImage);
-  state.cols = grid.columnsFor(desktop.clientWidth, size.w, PAD);
   state.display = grid.displayCells(state.layout.links, state.cols);
+  // Every column that holds an icon stays on screen: the grid shrinks rather than move icons.
+  const usedCols = state.layout.links.reduce((max, link) => Math.max(max, link.cell.col + 1), 1);
+  const fit = grid.fitGrid(desktop.clientWidth, SIZES[state.settings.iconSize].w, PAD, usedCols);
+  state.cols = fit.cols;
+  state.scale = fit.scale;
 
   const ids = new Set(state.layout.links.map((link) => link.id));
+  desktop.style.setProperty('--scale', String(state.scale));
   for (const id of state.selected) if (!ids.has(id)) state.selected.delete(id);
   if (state.focusId && !ids.has(state.focusId)) state.focusId = null;
 
@@ -462,7 +474,7 @@ function startRename(id) {
 
 // Free-cell dots, plus a dashed outline where each moving icon came from.
 function showDots(ids) {
-  const { w, h, tile: size } = metrics();
+  const { w, h, tile: size, padTop } = metrics();
   const rows = Math.max(Math.ceil((gridEl.offsetHeight - PAD) / h), Math.ceil((desktop.clientHeight - PAD) / h));
   const taken = grid.occupiedSet(state.display);
   const nodes = [];
@@ -471,7 +483,7 @@ function showDots(ids) {
       if (taken.has(grid.cellKey({ col, row }))) continue;
       const dot = el('span', { class: 'dot' });
       dot.style.left = `${PAD + col * w + w / 2}px`;
-      dot.style.top = `${PAD + row * h + 8 + size / 2}px`;
+      dot.style.top = `${PAD + row * h + padTop + size / 2}px`;
       nodes.push(dot);
     }
   }
@@ -479,7 +491,7 @@ function showDots(ids) {
     const outline = el('span', { class: 'ghost-origin' });
     const pos = cellPos(state.display.get(id));
     outline.style.left = `${pos.left + (w - size) / 2}px`;
-    outline.style.top = `${pos.top + 8}px`;
+    outline.style.top = `${pos.top + padTop}px`;
     nodes.push(outline);
   }
   dotsEl.replaceChildren(...nodes);

@@ -6,11 +6,12 @@ body {
   user-select: none;
 }
 
-/* --tile, --cell-w and --cell-h are set from newtab.js (SIZES). */
+/* --tile, --cell-w, --cell-h and --scale are set from newtab.js (SIZES, shrunk to fit the window). */
 #desktop {
   position: relative;
   overflow-y: auto;
   overflow-x: hidden;
+  scrollbar-gutter: stable; /* a scrollbar appearing doesn't change the width and the scale */
   outline: none;
 }
 
@@ -20,8 +21,8 @@ body {
   position: absolute;
   width: var(--cell-w);
   height: var(--cell-h);
-  padding: 8px 4px 0;
-  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: calc(8px * var(--scale, 1)) calc(4px * var(--scale, 1)) 0; /* 8px: ICON_PAD_TOP in newtab.js */
+  display: flex; flex-direction: column; align-items: center; gap: calc(6px * var(--scale, 1));
   color: var(--label-text, var(--text));
   text-decoration: none;
   border-radius: var(--radius-medium);
@@ -47,7 +48,7 @@ body {
 
 .label {
   max-width: 100%;
-  font-size: var(--font-size-small);
+  font-size: calc(var(--font-size-small) * var(--scale, 1));
   line-height: 1.3;
   text-align: center;
   overflow-wrap: anywhere;
@@ -63,7 +64,7 @@ body {
 }
 .rename {
   width: 100%;
-  font-size: var(--font-size-small);
+  font-size: calc(var(--font-size-small) * var(--scale, 1));
   text-align: center;
   padding: 2px 4px;
   min-height: 0;

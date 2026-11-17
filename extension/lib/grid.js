@@ -6,6 +6,15 @@ export function columnsFor(width, cellWidth, padding) {
   return Math.max(1, Math.floor((width - padding * 2) / cellWidth));
 }
 
+// How the grid fits a window `width` wide without moving any icon: every column up to
+// `usedCols` stays. If they don't fit at full size, cells shrink (scale < 1) as far as
+// needed, however narrow the window. Spare width adds empty columns.
+export function fitGrid(width, cellWidth, padding, usedCols) {
+  const fit = columnsFor(width, cellWidth, padding);
+  if (usedCols <= fit) return { cols: fit, scale: 1 };
+  return { cols: usedCols, scale: Math.max(1, width - padding * 2) / (usedCols * cellWidth) };
+}
+
 export function occupiedSet(cells, exceptId) {
   const set = new Set();
   for (const [id, cell] of cells) if (id !== exceptId) set.add(cellKey(cell));
